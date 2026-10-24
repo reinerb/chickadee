@@ -4,7 +4,7 @@ from anthropic import Anthropic
 from pyairtable import Api
 from pyairtable.api.types import RecordDict
 
-from content_monitor.config import load_settings
+from content_monitor.config import load_anthropic_key, load_settings
 
 MODEL = "claude-haiku-5-5"
 
@@ -49,7 +49,7 @@ def main() -> None:
     }
     recent = checks.all(sort=["-Checked at"], max_records=50)
 
-    client = Anthropic(api_key=settings.anthropic_api_key)
+    client = Anthropic(api_key=load_anthropic_key())
     message = client.messages.create(
         model=MODEL,
         max_tokens=1000,

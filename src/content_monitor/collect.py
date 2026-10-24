@@ -4,7 +4,7 @@ from anthropic import Anthropic
 from pyairtable import Api
 from pyairtable.api.types import UpdateRecordDict
 
-from content_monitor.config import load_settings
+from content_monitor.config import load_anthropic_key, load_settings
 from content_monitor.reviewer import parse_review
 from content_monitor.store import to_review_fields
 
@@ -14,7 +14,7 @@ def main() -> None:
     api = Api(settings.airtable_token)
     pages = api.table(settings.airtable_base_id, "Pages")
     batches = api.table(settings.airtable_base_id, "Audit batches")
-    claude = Anthropic(api_key=settings.anthropic_api_key)
+    claude = Anthropic(api_key=load_anthropic_key())
 
     pending = batches.all(formula="NOT({Collected})")
     if not pending:

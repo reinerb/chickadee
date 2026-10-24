@@ -8,7 +8,7 @@ from pyairtable import Api
 from pyairtable.api.types import UpdateRecordDict
 
 from content_monitor.checker import make_client
-from content_monitor.config import load_settings
+from content_monitor.config import load_anthropic_key, load_settings
 from content_monitor.extractor import extract_content
 from content_monitor.reviewer import build_review_request
 from content_monitor.store import to_content_fields
@@ -19,7 +19,7 @@ def main() -> None:
     api = Api(settings.airtable_token)
     pages = api.table(settings.airtable_base_id, "Pages")
     batches = api.table(settings.airtable_base_id, "Audit batches")
-    claude = Anthropic(api_key=settings.anthropic_api_key)
+    claude = Anthropic(api_key=load_anthropic_key())
 
     updates: list[UpdateRecordDict] = []
     requests: list[Request] = []
