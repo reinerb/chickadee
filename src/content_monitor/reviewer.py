@@ -1,5 +1,7 @@
-from anthropic import Anthropic
-from pydantic import BaseModel, Field
+from anthropic import Anthropic, transform_schema
+from anthropic.types import Message
+from anthropic.types.messages.batch_create_params import Request
+from pydantic import BaseModel, Field, ValidationError
 
 from content_monitor.extractor import PageContent
 
@@ -27,6 +29,48 @@ class SeoReview(BaseModel):
     issues: list[str] = Field(
         description="Specific, actionable problems, most important first"
     )
+
+
+OUTPUT_SCHEMA = transform_schema(SeoReview)
+
+
+def build_review_request(record_id: str, url: str, content: PageContent) -> Request:
+    return {
+        "custom_id": record_id,
+        "params": {
+            "model": MODEL,
+            "max_tokens": 4000,
+            "system": SYSTEM_PROMPT,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": f"<page>\n{format_page_for_review(url, content)}\n</page>",
+                }
+            ],
+            "output_config": {
+                "format": {"type": "json_schema", "schema": OUTPUT_SCHEMA}
+            },
+        },
+    }
+
+
+def parse_review_text(text: str) -> SeoReview | None:
+    try:
+        return SeoReview.model_validate_json(text)
+    except ValidationError as exc:
+        print(f"  Invalid review: {exc.error_count()} problem(s)")
+        return None
+
+
+def parse_review(message: Message) -> SeoReview | None:
+    if message.stop_reason != "end_turn":
+        return None
+
+    for block in message.content:
+        if block.type == "text":
+            return parse_review_text(block.text)
+
+    return None
 
 
 def format_page_for_review(url: str, content: PageContent) -> str:
