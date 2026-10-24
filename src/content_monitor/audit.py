@@ -21,7 +21,6 @@ def main() -> None:
     batches = api.table(settings.airtable_base_id, "Audit batches")
     claude = Anthropic(api_key=settings.anthropic_api_key)
 
-    audited_at = datetime.now(UTC)
     updates: list[UpdateRecordDict] = []
     requests: list[Request] = []
 
