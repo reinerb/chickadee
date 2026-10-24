@@ -10,6 +10,7 @@ dependencies = [
     "beautifulsoup4>=4.15.0",
     "httpx>=0.28.1",
     "pyairtable>=3.5.0.post1",
+    "pydantic>=2.14.1",
     "python-dotenv>=1.2.4",
 ]
 
