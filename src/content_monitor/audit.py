@@ -3,24 +3,27 @@ from datetime import UTC, datetime
 
 import httpx
 from anthropic import Anthropic
+from anthropic.types.messages.batch_create_params import Request
 from pyairtable import Api
 from pyairtable.api.types import UpdateRecordDict
 
 from content_monitor.checker import make_client
 from content_monitor.config import load_settings
 from content_monitor.extractor import extract_content
-from content_monitor.reviewer import review_page
-from content_monitor.store import to_audit_fields
+from content_monitor.reviewer import build_review_request
+from content_monitor.store import to_content_fields
 
 
 def main() -> None:
     settings = load_settings()
     api = Api(settings.airtable_token)
     pages = api.table(settings.airtable_base_id, "Pages")
+    batches = api.table(settings.airtable_base_id, "Audit batches")
     claude = Anthropic(api_key=settings.anthropic_api_key)
 
     audited_at = datetime.now(UTC)
     updates: list[UpdateRecordDict] = []
+    requests: list[Request] = []
 
     with make_client() as client:
         for record in pages.all(formula="{Active}"):
@@ -39,16 +42,21 @@ def main() -> None:
                 continue
 
             content = extract_content(response.text)
-            review = review_page(claude, url, content)
-            score = review.score if review else "?"
-            print(f"{score:>2}/10  {url}")
+            updates.append({"id": record["id"], "fields": to_content_fields(content)})
+            requests.append(build_review_request(record["id"], url, content))
+            print("queued  {url}")
 
-            updates.append(
-                {
-                    "id": record["id"],
-                    "fields": to_audit_fields(content, review, audited_at),
-                }
-            )
+    if not requests:
+        print("No pages to review.")
+        return
 
     pages.batch_update(updates)
-    print(f"Updated {len(updates)} page(s) in Airtable.")
+    batch = claude.messages.batches.create(requests=requests)
+    batches.create(
+        {
+            "Batch ID": batch.id,
+            "Submitted at": datetime.now(UTC).isoformat(),
+            "Pages": len(requests),
+        }
+    )
+    print(f"Submitted batch {batch.id} with {len(requests)} page(s).")
