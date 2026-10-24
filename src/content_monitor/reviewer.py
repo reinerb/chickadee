@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 
 from content_monitor.extractor import PageContent
 
-MODEL = "claude-haiku-5-5"
+MODEL = "claude-sonnet-5-5"
 
 SYSTEM_PROMPT = """You review web pages. Judge the page's metadata and structure for both
 traditional search engines and AI search tools that summarize and cite pages.
