@@ -1,9 +1,8 @@
 from datetime import UTC, datetime
 
-import httpx
 from pyairtable import Api
 
-from content_monitor.checker import check_url
+from content_monitor.checker import check_url, make_client
 from content_monitor.config import load_settings
 from content_monitor.store import to_check_fields
 
@@ -19,11 +18,7 @@ def main() -> None:
     checked_at = datetime.now(UTC)
     rows = []
 
-    with httpx.Client(
-        follow_redirects=True,
-        timeout=10.0,
-        headers={"User-Agent": "content-monitor (learning project)"},
-    ) as client:
+    with make_client() as client:
         for record in records:
             url = record["fields"]["URL"]
             result = check_url(client, url)

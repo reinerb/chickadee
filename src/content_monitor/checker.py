@@ -35,3 +35,11 @@ def check_url(client: httpx.Client, url: str) -> CheckResult:
         response_time_ms=elapsed_ms,
         error=None,
     )
+
+
+def make_client() -> httpx.Client:
+    return httpx.Client(
+        follow_redirects=True,
+        timeout=10.0,
+        headers={"User-Agent": "content-monitor (learning project)"},
+    )
