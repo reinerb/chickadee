@@ -7,6 +7,7 @@ authors = [{ name = "ben", email = "ben@tidemarkstudio.dev" }]
 requires-python = ">=3.14"
 dependencies = [
     "anthropic>=2.3.0",
+    "beautifulsoup4>=4.15.0",
     "httpx>=0.28.1",
     "pyairtable>=3.5.0.post1",
     "python-dotenv>=1.2.4",
