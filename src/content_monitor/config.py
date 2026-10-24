@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 class Settings:
     airtable_token: str
     airtable_base_id: str
+    anthropic_api_key: str
 
 
 def load_settings() -> Settings:
@@ -15,6 +16,7 @@ def load_settings() -> Settings:
 
     token = os.getenv("AIRTABLE_TOKEN")
     base_id = os.getenv("AIRTABLE_BASE_ID")
+    anthropic_key = os.getenv("ANTHROPIC_API_KEY")
 
     if not token:
         raise RuntimeError(
@@ -31,4 +33,11 @@ def load_settings() -> Settings:
             f"AIRTABLE_BASE_ID looks wrong: {base_id!r}. It should be just the 'app...' part."
         )
 
-    return Settings(airtable_token=token, airtable_base_id=base_id)
+    if not anthropic_key:
+        raise RuntimeError(
+            "Missing ANTHROPIC_API_KEY environment variable. Check your .env file."
+        )
+
+    return Settings(
+        airtable_token=token, airtable_base_id=base_id, anthropic_api_key=anthropic_key
+    )
