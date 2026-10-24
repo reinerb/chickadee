@@ -26,4 +26,9 @@ def load_settings() -> Settings:
             "Missing AIRTABLE_BASE_ID environment variable. Check your .env file."
         )
 
+    if not base_id.startswith("app") or "/" in base_id:
+        raise RuntimeError(
+            f"AIRTABLE_BASE_ID looks wrong: {base_id!r}. It should be just the 'app...' part."
+        )
+
     return Settings(airtable_token=token, airtable_base_id=base_id)
