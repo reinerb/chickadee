@@ -1,17 +1,26 @@
 import time
+from datetime import UTC, datetime
 
 import httpx
+from anthropic import Anthropic
 from pyairtable import Api
+from pyairtable.api.types import UpdateRecordDict
 
 from content_monitor.checker import make_client
 from content_monitor.config import load_settings
 from content_monitor.extractor import extract_content
+from content_monitor.reviewer import review_page
+from content_monitor.store import to_audit_fields
 
 
 def main() -> None:
     settings = load_settings()
     api = Api(settings.airtable_token)
     pages = api.table(settings.airtable_base_id, "Pages")
+    claude = Anthropic(api_key=settings.anthropic_api_key)
+
+    audited_at = datetime.now(UTC)
+    updates: list[UpdateRecordDict] = []
 
     with make_client() as client:
         for record in pages.all(formula="{Active}"):
@@ -30,9 +39,16 @@ def main() -> None:
                 continue
 
             content = extract_content(response.text)
-            print(url)
-            print(f"  title:       {content.title!r}")
-            print(f"  description: {content.meta_description!r}")
-            print(f"  h1s:         {content.h1s}")
-            print(f"  h2s:         {len(content.h2s)} found")
-            print(f"  words:       {content.word_count}")
+            review = review_page(claude, url, content)
+            score = review.score if review else "?"
+            print(f"{score:>2}/10  {url}")
+
+            updates.append(
+                {
+                    "id": record["id"],
+                    "fields": to_audit_fields(content, review, audited_at),
+                }
+            )
+
+    pages.batch_update(updates)
+    print(f"Updated {len(updates)} page(s) in Airtable.")
