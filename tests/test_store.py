@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from content_monitor.checker import CheckResult
 from content_monitor.extractor import PageContent
 from content_monitor.reviewer import SeoReview
-from content_monitor.store import to_audit_fields, to_check_fields
+from content_monitor.store import to_check_fields, to_content_fields, to_review_fields
 
 CHECKED_AT = datetime(2026, 10, 24, 12, 0, tzinfo=UTC)
 CONTENT = PageContent(
@@ -53,19 +53,13 @@ def test_connection_failure_omits_missing_values():
 
 
 def test_missing_title_is_sent_as_none_to_clear_old_value():
-    fields = to_audit_fields(CONTENT, None, CHECKED_AT)
+    fields = to_content_fields(CONTENT)
 
     assert "Current title" in fields
     assert fields["Current title"] is None
 
 
-def test_failed_review_leaves_previous_review_untouched():
-    fields = to_audit_fields(CONTENT, None, CHECKED_AT)
-
-    assert "SEO score" not in fields
-
-
-def test_review_issues_become_a_bulleted_list():
+def test_review_fields_include_score_and_bulleted_issues():
     review = SeoReview(
         score=6,
         summary="Decent.",
@@ -74,7 +68,7 @@ def test_review_issues_become_a_bulleted_list():
         issues=["First problem", "Second problem"],
     )
 
-    fields = to_audit_fields(CONTENT, review, CHECKED_AT)
+    fields = to_review_fields(review, CHECKED_AT)
 
     assert fields["SEO score"] == 6
     assert fields["SEO issues"] == "- First problem\n- Second problem"

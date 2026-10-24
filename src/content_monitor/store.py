@@ -22,6 +22,25 @@ def to_check_fields(
     return {name: value for name, value in fields.items() if value is not None}
 
 
+def to_content_fields(content: PageContent) -> dict[str, Any]:
+    return {
+        "Current title": content.title,
+        "Current description": content.meta_description,
+        "Word count": content.word_count,
+    }
+
+
+def to_review_fields(review: SeoReview, audited_at: datetime) -> dict[str, Any]:
+    return {
+        "SEO score": review.score,
+        "SEO summary": review.summary,
+        "Suggested title": review.suggested_title,
+        "Suggested description": review.suggested_description,
+        "SEO issues": "\n".join(f"- {issue}" for issue in review.issues),
+        "Last audited": audited_at.isoformat(),
+    }
+
+
 def to_audit_fields(
     content: PageContent, review: SeoReview | None, audited_at: datetime
 ) -> dict[str, Any]:
