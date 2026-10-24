@@ -20,6 +20,7 @@ content-monitor = "content_monitor:main"
 content-summary = "content_monitor.summary:main"
 content-audit = "content_monitor.audit:main"
 content-collect = "content_monitor.collect:main"
+content-import = "content_monitor.importer:main"
 
 [build-system]
 requires = ["uv_build>=0.11.26,<0.12.0"]
