@@ -29,3 +29,4 @@ jobs:
         env:
           AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
           AIRTABLE_BASE_ID: ${{ vars.AIRTABLE_BASE_ID }}
+          CHECK_LOG: ${{ vars.CHECK_LOG }}
