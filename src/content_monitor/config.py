@@ -1,13 +1,23 @@
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import Literal
 
 from dotenv import load_dotenv
+
+CheckLog = Literal["all", "changes"]
 
 
 @dataclass(frozen=True)
 class Settings:
     airtable_token: str
     airtable_base_id: str
+
+
+@dataclass(frozen=True)
+class Options:
+    check_log: CheckLog
+    retention_days: int
 
 
 def load_settings() -> Settings:
@@ -45,3 +55,27 @@ def load_anthropic_key() -> str:
             "Missing ANTHROPIC_API_KEY. Check your .env file or CI secrets."
         )
     return key
+
+
+def parse_options(env: Mapping[str, str]) -> Options:
+    check_log = env.get("CHECK_LOG") or "changes"
+    if check_log not in ("all", "changes"):
+        raise RuntimeError(f"CHECK_LOG must be 'all' or 'changes', not {check_log!r}")
+
+    days_text = env.get("RETENTION_DAYS") or "90"
+    try:
+        retention_days = int(days_text)
+    except ValueError:
+        raise RuntimeError(
+            f"RETENTION_DAYS must be a whole number, not {days_text!r}."
+        ) from None
+
+    if retention_days < 1:
+        raise RuntimeError("RETENTION_DAYS must be at least 1.")
+
+    return Options(check_log=check_log, retention_days=retention_days)
+
+
+def load_options() -> Options:
+    load_dotenv()
+    return parse_options(os.environ)
