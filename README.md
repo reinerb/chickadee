@@ -2,7 +2,7 @@
 
 ![CI](https://github.com/reinerb/content-monitor/actions/workflows/ci.yml/badge.svg)
 
-Content Monitor keeps an eye on a list of web pages. Every hour it checks that each page is up and logs the result in Airtable. Once a week it pulls each page's title, description and headings, asks Claude to review them for search, and writes the score and suggestions back to Airtable.
+Content Monitor keeps an eye on a list of web pages. Every hour it checks that each page is up and records the result in Airtable. Once a week it pulls each page's title, description and headings, asks Claude to review them for search, and writes the score and suggestions back to Airtable.
 
 I built this to get hands-on understanding of the Airtable and Claude APIs, and I wanted it to solve a problem content teams really have: finding out which pages are broken, slow, or hard to find in search without someone checking them by hand.
 
@@ -11,20 +11,46 @@ I built this to get hands-on understanding of the Airtable and Claude APIs, and 
 | Command | What it does |
 |---|---|
 | `content-import` | Reads a site's sitemap and adds any pages that aren't being tracked yet |
-| `content-monitor` | Checks every active page and records the status code, response time and any error |
-| `content-summary` | Reads the most recent checks and asks Claude for a short, plain-English health report |
+| `content-monitor` | Checks every active page, updates its current status, and logs the check |
+| `content-summary` | Asks Claude for a short, plain-English report on current status and the past week's outages |
 | `content-audit` | Pulls each page's title, meta description, headings and word count, saves them, and sends a batch of SEO reviews to Claude |
 | `content-collect` | Picks up finished review batches and saves Claude's score, suggested title and description, and list of issues |
+| `content-prune` | Deletes logged checks older than the retention period |
 
-Pages come into the Pages table from a sitemap or by hand. Uptime data flows from there into Checks, and `content-summary` reads it from there. SEO data goes from Pages to Claude's Message Batches API and comes back onto Pages.
+Pages come into the Pages table from a sitemap or by hand. Each uptime check updates the page's current status and, depending on the logging mode, adds a row to Checks. `content-summary` reads both. SEO data goes from Pages to Claude's Message Batches API and comes back onto Pages.
 
 ## How it's built
 
 ### Data model
 
-Uptime checks get their own table because one page builds up many checks over time, and that history is worth keeping. SEO results are different. Only the latest review matters, so each audit overwrites the fields on the page instead of adding rows.
+Every page stores its own current status: up or down, since when, and the latest status code and response time. Checks is a log, and how much goes into it is configurable (see [Storage settings](#storage-settings)). SEO results work like the current status: only the latest review matters, so each audit overwrites the fields on the page instead of adding rows.
+
+Status is a single select rather than a checkbox. Airtable leaves unchecked checkboxes out of API responses, so an empty checkbox could mean either "down" or "never checked." With a single select, empty only ever means "never checked."
 
 Creating and updating records needs slightly different handling. When a new check is created, empty values are simply left out. When a page is updated, a missing value is sent as empty on purpose, so if a page loses its title, the old title gets cleared instead of hanging around.
+
+Airtable can't save to two tables in one all-or-nothing operation, so the monitor writes the log before it updates the page. If the second write fails, the next run notices the same change again and logs it twice. Doing it the other way round would risk an outage never being logged at all, and a duplicate entry is the better failure.
+
+### Storage settings
+
+The free Airtable plan has a small record limit per base, and logging every check fills it quickly. Logging every check keeps this many rows in Checks:
+
+**active pages × 24 checks a day × days kept**
+
+So 10 pages kept for 14 days is 3,360 rows. To make the tool usable on any plan, two settings control storage:
+
+| Setting | Values | Default |
+|---|---|---|
+| `CHECK_LOG` | `changes` logs only when a page goes down or comes back up. `all` logs every check. | `changes` |
+| `RETENTION_DAYS` | How many days of logged checks `content-prune` keeps | `90` |
+
+The defaults suit the free plan. In `changes` mode, healthy pages add nothing to the log, so a stable site might log a few dozen rows in a year. Switch to `all` if your plan has room and you want detailed response-time history.
+
+### Summaries
+
+The summary works the same whichever logging mode is in use. It sends Claude two things: each active page's current status, and the outages and recoveries from the past week. Those events are worked out in Python from whatever is in the log. In `all` mode, a run of hourly checks collapses into a single "went down" and a single "came back up," so the cost of a summary stays small however much is stored.
+
+Durations are calculated in code, not by Claude. Language models are unreliable at date arithmetic, so the prompt hands over finished durations and tells Claude to use them as given. Empty sections are sent as "(none)" rather than left blank, so Claude can tell "nothing happened" from "no data."
 
 ### Importing pages
 
@@ -60,10 +86,14 @@ You'll need [uv](https://docs.astral.sh/uv/), which takes care of installing the
    AIRTABLE_TOKEN=pat...
    AIRTABLE_BASE_ID=app...
    ANTHROPIC_API_KEY=sk-ant-...
+
+   # Optional, shown with their defaults
+   CHECK_LOG=changes
+   RETENTION_DAYS=90
    ```
    The base ID is just the `app...` part of the base's URL.
 
-Only the commands that talk to Claude need the Claude key. `content-import` and `content-monitor` run without it.
+Only the commands that talk to Claude need the Claude key. `content-import`, `content-monitor` and `content-prune` run without it.
 
 ## Running it locally
 
@@ -72,33 +102,39 @@ uv run content-import https://example.org/sitemap.xml --dry-run    # preview new
 uv run content-import https://example.org/sitemap.xml --contains /blog/ --limit 20
 
 uv run content-monitor    # check every active page
-uv run content-summary    # get Claude's take on recent checks
+uv run content-summary    # get Claude's take on current status and the past week
 
 uv run content-audit      # gather page content and send it for review
 uv run content-collect    # save any reviews that are ready
+
+uv run content-prune --dry-run    # count checks older than the retention period
+uv run content-prune --days 30    # delete checks older than 30 days
 ```
 
-It's worth doing a dry run before every import. Real sitemaps often include tag, author and attachment pages you won't want to monitor, and `--contains` and `--limit` let you narrow things down. Run `uv run content-import --help` to see all the options.
+It's worth doing a dry run before every import. Real sitemaps often include tag, author and attachment pages you won't want to monitor, and `--contains` and `--limit` let you narrow things down. Run any command with `--help` to see its options.
 
 Most review batches finish within an hour, though they can take up to 24. You can run `content-collect` as often as you like. It tells you which batches are still processing and skips any it has already saved.
 
+`content-prune` permanently deletes records, so try `--dry-run` first. Without `--days`, it uses the `RETENTION_DAYS` setting, and it refuses a value below 1, which would delete everything. To try the other logging mode for a single run, set it in front of the command: `CHECK_LOG=all uv run content-monitor`.
+
 ## Automation
 
-Three GitHub Actions workflows run the tool on a schedule. All times are UTC.
+Four GitHub Actions workflows run the tool on a schedule. All times are UTC.
 
 | Workflow | When it runs | Command |
 |---|---|---|
 | `monitor.yml` | Every hour at :17 | `content-monitor` |
-| `audit.yml` | Mondays at 10:23 | `content-audit` |
+| `audit.yml` | Mondays at 10:23 | `content-audit`, then `content-summary` |
 | `collect.yml` | Every 6 hours | `content-collect` |
+| `prune.yml` | Daily at 04:43 | `content-prune` |
 
-Each one can also be started by hand from the Actions tab. Importing isn't scheduled, since it's worth checking a dry run before adding pages.
+Each one can also be started by hand from the Actions tab. Importing isn't scheduled, since it's worth checking a dry run before adding pages. The weekly uptime summary appears on the audit run's page.
 
-The credentials live in a GitHub environment called `production`, which only the `main` branch can use, so they're only ever available to code that's already been merged. Inside each workflow, credentials are passed only to the step that needs them, and the uptime workflow never gets the Claude key at all. Each workflow has its own timeout and won't start a new run while the previous one is still going.
+The credentials live in a GitHub environment called `production`, which only the `main` branch can use, so they're only ever available to code that's already been merged. Inside each workflow, credentials are passed only to the step that needs them, and the uptime and prune workflows never get the Claude key at all. Each workflow has its own timeout and won't start a new run while the previous one is still going.
+
+To change the storage settings for scheduled runs, add `CHECK_LOG` or `RETENTION_DAYS` as variables in the `production` environment. If they're not set, the defaults apply.
 
 A separate `ci.yml` workflow runs linting, formatting checks, type checking and tests on every push and pull request. It has no access to any credentials. Dependabot opens pull requests when the GitHub Actions or Python dependencies have updates, and CI checks each one before it's merged.
-
-An uptime summary is presented directly within the weekly audit run.
 
 ## Development
 
@@ -109,7 +145,7 @@ uv run pyright             # type check
 uv run pytest              # test
 ```
 
-The tests cover the pure functions: turning results into Airtable fields, pulling content out of HTML, reading sitemaps, deciding which pages to import, and validating Claude's reviews. None of them touch the network, Airtable or Claude, so they run in a second and don't cost anything. That's also why CI can run them without credentials.
+The tests cover the pure functions: reading the storage settings, deciding when a check gets logged, turning a log into outage and recovery events, building Airtable formulas, turning results into Airtable fields, pulling content out of HTML, reading sitemaps, deciding which pages to import, and validating Claude's reviews. None of them touch the network, Airtable or Claude, so they run in a second and don't cost anything. That's also why CI can run them without credentials.
 
 ## Airtable schema
 
@@ -122,6 +158,11 @@ Field names are case-sensitive and need to match exactly.
 | URL | URL (primary) |
 | Name | Single line text |
 | Active | Checkbox |
+| Status | Single select, with the options `Up` and `Down` |
+| Status since | Date with time |
+| Last checked | Date with time |
+| Last status code | Number |
+| Last response time (ms) | Number |
 | Current title | Single line text |
 | Current description | Long text |
 | Word count | Number |
@@ -131,7 +172,8 @@ Field names are case-sensitive and need to match exactly.
 | Suggested description | Long text |
 | SEO issues | Long text |
 | Last audited | Date with time |
-| Last checked | Rollup of Checks → Checked at, using `MAX(values)` (optional) |
+
+"Last checked" is written by the monitor. It used to be a rollup of Checks, but in `changes` mode the newest logged check usually isn't the newest check.
 
 **Checks**
 
@@ -163,25 +205,28 @@ src/content_monitor/
   summary.py     content-summary: Claude's health report
   audit.py       content-audit: gather page content and submit reviews
   collect.py     content-collect: save finished reviews
-  config.py      reads settings and credentials from the environment or .env
+  prune.py       content-prune: delete old checks
+  config.py      reads credentials and storage settings from the environment or .env
   checker.py     the shared HTTP client and single-page check
+  history.py     turns logged checks into outage and recovery events
+  formulas.py    Airtable formulas for filtering checks by date
   sitemap.py     reads sitemaps and sitemap indexes
   extractor.py   pulls the title, description, headings and word count from HTML
   reviewer.py    the review schema, prompt, batch requests and validation
-  store.py       turns results into Airtable fields
+  store.py       turns results into Airtable fields and decides what gets logged
 tests/
 .github/
-  workflows/     CI plus the three scheduled jobs
+  workflows/     CI plus the four scheduled jobs
   dependabot.yml
 ```
 
 ## Limitations and next steps
 
-- The Checks table gains a row for every active page every hour, so a large import will run into Airtable's record limits quickly. Pruning old checks is on the list soon.
 - Imports match URLs exactly, so `https://example.org/page` and `https://example.org/page/` count as two different pages. Compressed (`.xml.gz`) sitemaps aren't supported, and an import stops after reading 50 sitemaps.
+- If a page went down more than a week ago and has since recovered, the summary doesn't list it as an event. Its current status still shows how long it's been back up.
+- Every page is a record too, so very large imports can still reach the free plan's limit, whatever the logging mode.
 - Claude only sees metadata and headings, not the body text, so reviews cover how findable and well-structured a page is rather than how well it's written.
 - If a page is deleted from Airtable between `content-audit` and `content-collect`, saving that batch fails.
 - GitHub doesn't guarantee exact start times for scheduled runs, and they can be delayed when it's busy. On public repos, scheduled workflows also pause after 60 days without any repository activity.
 - Every scheduled run counts as a deployment to the `production` environment, which clutters the repo's deployment history.
 - Links within pages aren't checked yet.
-- `content-summary` only looks at the 50 most recent checks.
