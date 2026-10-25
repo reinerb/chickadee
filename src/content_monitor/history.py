@@ -31,7 +31,7 @@ def find_events(checks: Sequence[RecordDict]) -> list[Event]:
         last_status[page_id] = status
 
         went_down = status == "Down" and previous != "Down"
-        came_back = status == "Up" and previous == "Up"
+        came_back = status == "Up" and previous == "Down"
 
         if went_down or came_back:
             events.append(
