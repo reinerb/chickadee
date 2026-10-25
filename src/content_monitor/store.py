@@ -16,6 +16,10 @@ def classify_change(previous_hash: str | None, current_hash: str) -> ContentChan
     return "unchanged" if previous_hash == current_hash else "changed"
 
 
+def needs_review(reviewed_hash: str | None, current_hash: str) -> bool:
+    return reviewed_hash != current_hash
+
+
 def to_check_fields(
     page_id: str, result: CheckResult, checked_at: datetime
 ) -> dict[str, Any]:
