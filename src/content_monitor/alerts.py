@@ -1,5 +1,6 @@
+import argparse
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -71,26 +72,53 @@ def send_alerts(
     return failures
 
 
-def main() -> None:
-    webhook_url = load_alert_webhook()
-    if not webhook_url:
-        raise SystemExit("Set ALERT_WEBHOOK_URL in .env first.")
-
-    now = datetime.now(UTC)
-    sample = build_alert(
-        name="Example page",
-        url="https://example.org/",
-        result=CheckResult(
+def build_test_alert(*, recovered: bool, now: datetime) -> dict[str, Any]:
+    if recovered:
+        result = CheckResult(
+            url="https://example.org/",
+            ok=True,
+            status_code=200,
+            response_time_ms=180,
+            error=None,
+        )
+    else:
+        result = CheckResult(
             url="https://example.org/",
             ok=False,
             status_code=503,
             response_time_ms=1200,
             error="Example error",
-        ),
-        previous_since=now.replace(hour=0, minute=0),
+        )
+
+    return build_alert(
+        name="Example page",
+        url="https://example.org/",
+        result=result,
+        previous_since=now - timedelta(hours=2, minutes=15),
         checked_at=now,
         test=True,
     )
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Send a sample alert to the alert webhook."
+    )
+    parser.add_argument(
+        "--recovered",
+        action="store_true",
+        help="send a 'back up' alert instead of a 'down' alert",
+    )
+    args = parser.parse_args()
+
+    webhook_url = load_alert_webhook()
+    if not webhook_url:
+        raise SystemExit("Set ALERT_WEBHOOK_URL in .env first.")
+
+    sample = build_test_alert(recovered=args.recovered, now=datetime.now(UTC))
     with make_client() as client:
         failures = send_alerts(client, webhook_url, [sample])
-    print("Sent a test alert." if not failures else "Test alert failed.")
+
+    if failures:
+        raise SystemExit("Test alert failed.")
+    print(f"Sent a test '{sample['event']}' alert.")

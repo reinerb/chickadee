@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from content_monitor.alerts import build_alert, should_alert
+from content_monitor.alerts import build_alert, build_test_alert, should_alert
 from content_monitor.checker import CheckResult
 
 NOW = datetime(2026, 10, 24, 15, 0, tzinfo=UTC)
@@ -63,3 +63,12 @@ def test_recovery_alert_includes_downtime():
     assert alert["event"] == "recovered"
     assert alert["duration"] == "2h 15m"
     assert "after 2h 15m down" in alert["message"]
+
+
+def test_test_alerts_cover_both_events_with_the_same_shape():
+    down = build_test_alert(recovered=False, now=NOW)
+    recovered = build_test_alert(recovered=True, now=NOW)
+
+    assert (down["event"], recovered["event"]) == ("down", "recovered")
+    assert down["test"] and recovered["test"]
+    assert down.keys() == recovered.keys()
