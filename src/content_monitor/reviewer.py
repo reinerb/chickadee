@@ -34,9 +34,20 @@ class SeoReview(BaseModel):
 OUTPUT_SCHEMA = transform_schema(SeoReview)
 
 
-def build_review_request(record_id: str, url: str, content: PageContent) -> Request:
+def make_custom_id(record_id: str, content_hash: str) -> str:
+    return f"{record_id}-{content_hash}"
+
+
+def parse_custom_id(custom_id: str) -> tuple[str, str | None]:
+    record_id, _, content_hash = custom_id.partition("-")
+    return record_id, content_hash or None
+
+
+def build_review_request(
+    record_id: str, content_hash: str, url: str, content: PageContent
+) -> Request:
     return {
-        "custom_id": record_id,
+        "custom_id": make_custom_id(record_id, content_hash),
         "params": {
             "model": MODEL,
             "max_tokens": 4000,
