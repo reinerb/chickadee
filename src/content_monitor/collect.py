@@ -5,7 +5,7 @@ from pyairtable import Api
 from pyairtable.api.types import UpdateRecordDict
 
 from content_monitor.config import load_anthropic_key, load_settings
-from content_monitor.reviewer import parse_review
+from content_monitor.reviewer import parse_custom_id, parse_review
 from content_monitor.store import to_review_fields
 
 
@@ -43,10 +43,11 @@ def main() -> None:
                 print(f"  {result.custom_id}: no usable review")
                 continue
 
+            record_id, reviewed_hash = parse_custom_id(result.custom_id)
             updates.append(
                 {
-                    "id": result.custom_id,
-                    "fields": to_review_fields(review, reviewed_at),
+                    "id": record_id,
+                    "fields": to_review_fields(review, reviewed_at, reviewed_hash),
                 }
             )
 

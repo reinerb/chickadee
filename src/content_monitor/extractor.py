@@ -1,6 +1,9 @@
+import hashlib
 from dataclasses import dataclass
 
 from bs4 import BeautifulSoup
+
+HASH_LENGTH = 16
 
 
 @dataclass(frozen=True)
@@ -10,6 +13,7 @@ class PageContent:
     h1s: tuple[str, ...]
     h2s: tuple[str, ...]
     word_count: int
+    text: str
 
 
 def _meta_description(soup: BeautifulSoup) -> str | None:
@@ -26,6 +30,12 @@ def _meta_description(soup: BeautifulSoup) -> str | None:
     return None
 
 
+def content_hash(content: PageContent) -> str:
+    parts = [content.title or "", content.meta_description or "", content.text]
+    digest = hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()
+    return digest[:HASH_LENGTH]
+
+
 def extract_content(html: str) -> PageContent:
     soup = BeautifulSoup(html, "html.parser")
 
@@ -38,12 +48,13 @@ def extract_content(html: str) -> PageContent:
         tag.decompose()
 
     body = soup.select_one("main") or soup.body or soup
-    word_count = len(body.get_text(" ", strip=True).split())
+    text = " ".join(body.get_text(" ", strip=True).split())
 
     return PageContent(
         title=title or None,
         meta_description=description,
         h1s=h1s,
         h2s=h2s,
-        word_count=word_count,
+        word_count=len(text.split()),
+        text=text,
     )

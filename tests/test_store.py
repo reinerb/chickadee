@@ -1,9 +1,11 @@
 from datetime import UTC, datetime
 
 from content_monitor.checker import CheckResult
-from content_monitor.extractor import PageContent
+from content_monitor.extractor import PageContent, content_hash
 from content_monitor.reviewer import SeoReview
 from content_monitor.store import (
+    classify_change,
+    needs_review,
     should_log,
     to_check_fields,
     to_content_fields,
@@ -18,6 +20,7 @@ CONTENT = PageContent(
     h1s=("Heading",),
     h2s=(),
     word_count=250,
+    text="Lorem ipsum, dolor sit amet consectetur adipisicing elit. Modi qui temporibus saepe eaque earum, molestiae autem in iure magnam asperiores distinctio explicabo. Beatae, ducimus fuga eaque quas repudiandae unde alias in numquam, enim sunt, laborum provident id placeat? Qui culpa adipisci consequuntur voluptas aliquid laudantium itaque dicta. Nesciunt soluta tempora esse amet, repudiandae a hic porro ex mollitia eaque voluptatem, nulla error reprehenderit non blanditiis totam. Nostrum sed quisquam ipsum hic laboriosam placeat necessitatibus neque? Sapiente omnis illum iure, aliquid adipisci quae nostrum quidem ipsam, libero velit neque vitae necessitatibus? Possimus eaque omnis sit mollitia beatae provident ad velit laboriosam obcaecati in quaerat, rerum eum ullam consequuntur molestiae ducimus nostrum assumenda accusantium voluptatem amet! Consequatur totam temporibus praesentium quasi maxime fuga quae officia neque perspiciatis, nemo possimus nostrum ratione nobis rem inventore? Placeat asperiores fugiat ipsam odio eius quod eligendi corporis, vero voluptatibus sapiente dolores soluta dolore laudantium quae. Repellat laboriosam corporis, omnis minus quis nulla excepturi veniam id ut, quod fugiat quasi expedita, beatae ex! Soluta minus ad labore vel asperiores quia, corporis officiis nobis, voluptas quo voluptatem accusamus dolore, totam animi repellat dolores enim earum saepe veritatis odio doloremque eos quas ullam impedit? Tempora, suscipit, explicabo quidem rerum molestiae quia inventore quasi eaque sit magni molestias enim a, voluptatum doloribus totam libero pariatur culpa ipsum ut reiciendis itaque minus sequi neque! Odit labore non temporibus ducimus atque dolorem ipsam soluta harum eum, repudiandae mollitia reiciendis fugiat saepe ut optio dolorum ex reprehenderit, voluptate iste error perferendis. Optio, tempore.",
 )
 
 
@@ -69,7 +72,7 @@ def test_connection_failure_omits_missing_values():
 
 
 def test_missing_title_is_sent_as_none_to_clear_old_value():
-    fields = to_content_fields(CONTENT)
+    fields = to_content_fields(CONTENT, content_hash(CONTENT), "new", datetime.now())
 
     assert "Current title" in fields
     assert fields["Current title"] is None
@@ -84,7 +87,7 @@ def test_review_fields_include_score_and_bulleted_issues():
         issues=["First problem", "Second problem"],
     )
 
-    fields = to_review_fields(review, CHECKED_AT)
+    fields = to_review_fields(review, CHECKED_AT, content_hash(CONTENT))
 
     assert fields["SEO score"] == 6
     assert fields["SEO issues"] == "- First problem\n- Second problem"
@@ -109,3 +112,24 @@ def test_status_since_only_moves_when_status_changes():
 
     assert "Status since" not in unchanged
     assert changed["Status since"] == CHECKED_AT.isoformat()
+
+
+def test_change_classification():
+    assert classify_change(None, "abc") == "new"
+    assert classify_change("abc", "abc") == "unchanged"
+    assert classify_change("abc", "xyz") == "changed"
+
+
+def test_review_needed_until_the_current_version_is_reviewed():
+    assert needs_review(None, "abc")
+    assert needs_review("old", "abc")
+    assert not needs_review("abc", "abc")
+
+
+def test_changed_at_is_only_set_for_real_changes():
+    new = to_content_fields(CONTENT, "abc", "new", CHECKED_AT)
+    changed = to_content_fields(CONTENT, "abc", "changed", CHECKED_AT)
+
+    assert "Content changed at" not in new
+    assert changed["Content changed at"] == CHECKED_AT.isoformat()
+    assert changed["Content hash"] == "abc"

@@ -1,10 +1,23 @@
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from content_monitor.checker import CheckResult
 from content_monitor.config import CheckLog
 from content_monitor.extractor import PageContent
 from content_monitor.reviewer import SeoReview
+
+ContentChange = Literal["new", "changed", "unchanged"]
+
+
+def classify_change(previous_hash: str | None, current_hash: str) -> ContentChange:
+    if previous_hash is None:
+        return "new"
+
+    return "unchanged" if previous_hash == current_hash else "changed"
+
+
+def needs_review(reviewed_hash: str | None, current_hash: str) -> bool:
+    return reviewed_hash != current_hash
 
 
 def to_check_fields(
@@ -23,16 +36,26 @@ def to_check_fields(
     return {name: value for name, value in fields.items() if value is not None}
 
 
-def to_content_fields(content: PageContent) -> dict[str, Any]:
-    return {
+def to_content_fields(
+    content: PageContent, current_hash: str, change: ContentChange, audited_at: datetime
+) -> dict[str, Any]:
+    fields: dict[str, Any] = {
         "Current title": content.title,
         "Current description": content.meta_description,
         "Word count": content.word_count,
+        "Content hash": current_hash,
     }
 
+    if change == "changed":
+        fields["Content changed at"] = audited_at.isoformat()
 
-def to_review_fields(review: SeoReview, audited_at: datetime) -> dict[str, Any]:
-    return {
+    return fields
+
+
+def to_review_fields(
+    review: SeoReview, audited_at: datetime, reviewed_hash: str | None
+) -> dict[str, Any]:
+    fields: dict[str, Any] = {
         "SEO score": review.score,
         "SEO summary": review.summary,
         "Suggested title": review.suggested_title,
@@ -40,6 +63,11 @@ def to_review_fields(review: SeoReview, audited_at: datetime) -> dict[str, Any]:
         "SEO issues": "\n".join(f"- {issue}" for issue in review.issues),
         "Last audited": audited_at.isoformat(),
     }
+
+    if reviewed_hash is not None:
+        fields["Reviewed hash"] = reviewed_hash
+
+    return fields
 
 
 def to_audit_fields(
