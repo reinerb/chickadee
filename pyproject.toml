@@ -22,6 +22,7 @@ content-audit = "content_monitor.audit:main"
 content-collect = "content_monitor.collect:main"
 content-import = "content_monitor.importer:main"
 content-prune = "content_monitor.prune:main"
+content-test-alert = "content_monitor.alerts:main"
 
 [build-system]
 requires = ["uv_build>=0.11.26,<0.14.0"]
