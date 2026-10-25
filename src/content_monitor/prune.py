@@ -3,9 +3,7 @@ from datetime import UTC, datetime, timedelta
 
 from pyairtable import Api
 
-from content_monitor.config import load_settings
-
-DEFAULT_DAYS = 14
+from content_monitor.config import load_options, load_settings
 
 
 def older_than_formula(cutoff: datetime) -> str:
@@ -28,8 +26,7 @@ def main() -> None:
     parser.add_argument(
         "--days",
         type=positive_int,
-        default=DEFAULT_DAYS,
-        help=f"keep checks from the last N days (default: {DEFAULT_DAYS})",
+        help="keep checks from the last N days (default: the RETENTION_DAYS setting, or 90)",
     )
     parser.add_argument(
         "--dry-run",
@@ -40,10 +37,11 @@ def main() -> None:
 
     settings = load_settings()
     checks = Api(settings.airtable_token).table(settings.airtable_base_id, "Checks")
+    days = args.days if args.days is not None else load_options().retention_days
 
-    cutoff = datetime.now(UTC) - timedelta(days=args.days)
+    cutoff = datetime.now(UTC) - timedelta(days=days)
     old = checks.all(formula=older_than_formula(cutoff), fields=["Checked at"])
-    print(f"Found {len(old)} check(s) older than {args.days} days")
+    print(f"Found {len(old)} check(s) older than {days} days")
 
     if args.dry_run:
         print("Dry run: nothing was deleted")
