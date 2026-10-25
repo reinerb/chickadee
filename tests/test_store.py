@@ -3,7 +3,13 @@ from datetime import UTC, datetime
 from content_monitor.checker import CheckResult
 from content_monitor.extractor import PageContent
 from content_monitor.reviewer import SeoReview
-from content_monitor.store import to_check_fields, to_content_fields, to_review_fields
+from content_monitor.store import (
+    should_log,
+    to_check_fields,
+    to_content_fields,
+    to_review_fields,
+    to_status_fields,
+)
 
 CHECKED_AT = datetime(2026, 10, 24, 12, 0, tzinfo=UTC)
 CONTENT = PageContent(
@@ -13,6 +19,16 @@ CONTENT = PageContent(
     h2s=(),
     word_count=250,
 )
+
+
+def make_result(ok: bool) -> CheckResult:
+    return CheckResult(
+        url="https://example.org",
+        ok=ok,
+        status_code=200 if ok else 503,
+        response_time_ms=100,
+        error=None,
+    )
 
 
 def test_successful_check_includes_all_fields():
@@ -72,3 +88,24 @@ def test_review_fields_include_score_and_bulleted_issues():
 
     assert fields["SEO score"] == 6
     assert fields["SEO issues"] == "- First problem\n- Second problem"
+
+
+def test_changes_mode_logs_only_when_status_changes():
+    assert should_log("Up", make_result(ok=False), "changes")
+    assert not should_log("Up", make_result(ok=True), "changes")
+
+
+def test_first_check_is_always_logged():
+    assert should_log(None, make_result(ok=True), "changes")
+
+
+def test_all_mode_logs_every_check():
+    assert should_log("Up", make_result(ok=True), "all")
+
+
+def test_status_since_only_moves_when_status_changes():
+    unchanged = to_status_fields(make_result(ok=True), CHECKED_AT, "Up")
+    changed = to_status_fields(make_result(ok=False), CHECKED_AT, "Up")
+
+    assert "Status since" not in unchanged
+    assert changed["Status since"] == CHECKED_AT.isoformat()
