@@ -79,3 +79,8 @@ def parse_options(env: Mapping[str, str]) -> Options:
 def load_options() -> Options:
     load_dotenv()
     return parse_options(os.environ)
+
+
+def load_alert_webhook() -> str | None:
+    load_dotenv()
+    return os.getenv("ALERT_WEBHOOK_URL") or None
