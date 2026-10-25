@@ -12,7 +12,12 @@ from pyairtable.api.types import UpdateRecordDict
 from content_monitor.checker import make_client
 from content_monitor.config import load_anthropic_key, load_settings
 from content_monitor.extractor import content_hash, extract_content
-from content_monitor.reviewer import build_review_request
+from content_monitor.reviewer import (
+    Topic,
+    build_review_request,
+    build_system_prompt,
+    review_schema,
+)
 from content_monitor.store import classify_change, needs_review, to_content_fields
 
 
@@ -31,6 +36,22 @@ def main() -> None:
     api = Api(settings.airtable_token)
     pages = api.table(settings.airtable_base_id, "Pages")
     batches = api.table(settings.airtable_base_id, "Audit batches")
+
+    topics = [
+        Topic(
+            name=record["fields"]["Name"],
+            description=record["fields"].get("Description"),
+        )
+        for record in api.table(settings.airtable_base_id, "Topics").all(
+            fields=["Name", "Description"]
+        )
+        if record["fields"].get("Name")
+    ]
+    if not topics:
+        raise SystemExit("Add at least one topic to the Topics table before auditing.")
+
+    system = build_system_prompt(topics)
+    schema = review_schema([topic.name for topic in topics])
 
     audited_at = datetime.now(UTC)
     updates: list[UpdateRecordDict] = []
@@ -72,7 +93,14 @@ def main() -> None:
 
             if args.all or needs_review(fields.get("Reviewed hash"), current):
                 requests.append(
-                    build_review_request(record["id"], current, url, content)
+                    build_review_request(
+                        record["id"],
+                        current,
+                        url,
+                        content,
+                        system=system,
+                        schema=schema,
+                    )
                 )
                 action = "review"
             else:

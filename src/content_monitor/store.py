@@ -96,7 +96,7 @@ def to_review_fields(
 
 
 def to_audit_fields(
-    content: PageContent, review: SeoReview | None, audited_at: datetime
+    content: PageContent, review: PageReview | None, audited_at: datetime
 ) -> dict[str, Any]:
     fields: dict[str, Any] = {
         "Current title": content.title,
