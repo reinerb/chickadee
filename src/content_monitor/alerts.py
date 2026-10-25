@@ -1,10 +1,11 @@
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
 
-from content_monitor.checker import CheckResult
+from content_monitor.checker import CheckResult, make_client
+from content_monitor.config import load_alert_webhook
 from content_monitor.history import describe_duration
 from content_monitor.store import status_of
 
@@ -68,3 +69,28 @@ def send_alerts(
             print(f"  alert failed for {alert['page']}: {type(exc).__name__}")
 
     return failures
+
+
+def main() -> None:
+    webhook_url = load_alert_webhook()
+    if not webhook_url:
+        raise SystemExit("Set ALERT_WEBHOOK_URL in .env first.")
+
+    now = datetime.now(UTC)
+    sample = build_alert(
+        name="Example page",
+        url="https://example.org/",
+        result=CheckResult(
+            url="https://example.org/",
+            ok=False,
+            status_code=503,
+            response_time_ms=1200,
+            error="Example error",
+        ),
+        previous_since=now.replace(hour=0, minute=0),
+        checked_at=now,
+        test=True,
+    )
+    with make_client() as client:
+        failures = send_alerts(client, webhook_url, [sample])
+    print("Sent a test alert." if not failures else "Test alert failed.")
