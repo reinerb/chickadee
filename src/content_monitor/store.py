@@ -53,7 +53,7 @@ def to_content_fields(
 
 
 def to_review_fields(
-    review: SeoReview, audited_at: datetime, reviewed_hash: str
+    review: SeoReview, audited_at: datetime, reviewed_hash: str | None
 ) -> dict[str, Any]:
     fields: dict[str, Any] = {
         "SEO score": review.score,
