@@ -10,12 +10,13 @@ I built this to get hands-on understanding of the Airtable and Claude APIs, and 
 
 | Command | What it does |
 |---|---|
+| `content-import` | Reads a site's sitemap and adds any pages that aren't being tracked yet |
 | `content-monitor` | Checks every active page and records the status code, response time and any error |
 | `content-summary` | Reads the most recent checks and asks Claude for a short, plain-English health report |
 | `content-audit` | Pulls each page's title, meta description, headings and word count, saves them, and sends a batch of SEO reviews to Claude |
 | `content-collect` | Picks up finished review batches and saves Claude's score, suggested title and description, and list of issues |
 
-Uptime data flows from the Pages table into Checks, and `content-summary` reads it from there. SEO data goes from Pages to Claude's Message Batches API and comes back onto Pages.
+Pages come into the Pages table from a sitemap or by hand. Uptime data flows from there into Checks, and `content-summary` reads it from there. SEO data goes from Pages to Claude's Message Batches API and comes back onto Pages.
 
 ## How it's built
 
@@ -24,6 +25,12 @@ Uptime data flows from the Pages table into Checks, and `content-summary` reads 
 Uptime checks get their own table because one page builds up many checks over time, and that history is worth keeping. SEO results are different. Only the latest review matters, so each audit overwrites the fields on the page instead of adding rows.
 
 Creating and updating records needs slightly different handling. When a new check is created, empty values are simply left out. When a page is updated, a missing value is sent as empty on purpose, so if a page loses its title, the old title gets cleared instead of hanging around.
+
+### Importing pages
+
+`content-import` reads a sitemap, follows any sitemap indexes down to the actual lists of pages, and adds the pages that aren't tracked yet. It only ever creates records. An upsert would have been simpler, but it would also have switched monitoring back on for pages I'd deliberately paused, so existing rows are left alone.
+
+It also lists pages I'm tracking that have dropped out of the sitemap, since those may have been moved or deleted. A `--dry-run` flag shows exactly what would be added before anything changes. Sitemaps come from sites I don't control, so they're parsed with `defusedxml`, which blocks the malicious-XML tricks that Python's standard parser is open to.
 
 ### Working with Claude
 
@@ -35,7 +42,7 @@ I chose models by trying them. The uptime summary uses Claude Haiku because the 
 
 ### Fetching pages
 
-Requests identify the tool with a User-Agent and give up after 10 seconds. Audits also wait a second between pages so they don't hammer anyone's site.
+Requests identify the tool with a User-Agent and give up after 10 seconds. Audits and sitemap imports also wait a second between requests so they don't hammer anyone's site.
 
 ## Setup
 
@@ -56,11 +63,14 @@ You'll need [uv](https://docs.astral.sh/uv/), which takes care of installing the
    ```
    The base ID is just the `app...` part of the base's URL.
 
-Only the commands that talk to Claude need the Claude key. `content-monitor` runs without it.
+Only the commands that talk to Claude need the Claude key. `content-import` and `content-monitor` run without it.
 
 ## Running it locally
 
 ```bash
+uv run content-import https://example.org/sitemap.xml --dry-run    # preview new pages
+uv run content-import https://example.org/sitemap.xml --contains /blog/ --limit 20
+
 uv run content-monitor    # check every active page
 uv run content-summary    # get Claude's take on recent checks
 
@@ -68,7 +78,9 @@ uv run content-audit      # gather page content and send it for review
 uv run content-collect    # save any reviews that are ready
 ```
 
-Most batches finish within an hour, though they can take up to 24. You can run `content-collect` as often as you like. It tells you which batches are still processing and skips any it has already saved.
+It's worth doing a dry run before every import. Real sitemaps often include tag, author and attachment pages you won't want to monitor, and `--contains` and `--limit` let you narrow things down. Run `uv run content-import --help` to see all the options.
+
+Most review batches finish within an hour, though they can take up to 24. You can run `content-collect` as often as you like. It tells you which batches are still processing and skips any it has already saved.
 
 ## Automation
 
@@ -80,7 +92,7 @@ Three GitHub Actions workflows run the tool on a schedule. All times are UTC.
 | `audit.yml` | Mondays at 10:23 | `content-audit` |
 | `collect.yml` | Every 6 hours | `content-collect` |
 
-Each one can also be started by hand from the Actions tab.
+Each one can also be started by hand from the Actions tab. Importing isn't scheduled, since it's worth checking a dry run before adding pages.
 
 The credentials live in a GitHub environment called `production`, which only the `main` branch can use, so they're only ever available to code that's already been merged. Inside each workflow, credentials are passed only to the step that needs them, and the uptime workflow never gets the Claude key at all. Each workflow has its own timeout and won't start a new run while the previous one is still going.
 
@@ -97,7 +109,7 @@ uv run pyright             # type check
 uv run pytest              # test
 ```
 
-The tests cover the pure functions: turning results into Airtable fields, pulling content out of HTML, and validating Claude's reviews. None of them touch the network, Airtable or Claude, so they run in a second and don't cost anything. That's also why CI can run them without credentials.
+The tests cover the pure functions: turning results into Airtable fields, pulling content out of HTML, reading sitemaps, deciding which pages to import, and validating Claude's reviews. None of them touch the network, Airtable or Claude, so they run in a second and don't cost anything. That's also why CI can run them without credentials.
 
 ## Airtable schema
 
@@ -147,11 +159,13 @@ Field names are case-sensitive and need to match exactly.
 ```
 src/content_monitor/
   __init__.py    content-monitor: uptime checks
+  importer.py    content-import: decide which sitemap pages to add, and add them
   summary.py     content-summary: Claude's health report
   audit.py       content-audit: gather page content and submit reviews
   collect.py     content-collect: save finished reviews
   config.py      reads settings and credentials from the environment or .env
   checker.py     the shared HTTP client and single-page check
+  sitemap.py     reads sitemaps and sitemap indexes
   extractor.py   pulls the title, description, headings and word count from HTML
   reviewer.py    the review schema, prompt, batch requests and validation
   store.py       turns results into Airtable fields
@@ -163,6 +177,8 @@ tests/
 
 ## Limitations and next steps
 
+- The Checks table gains a row for every active page every hour, so a large import will run into Airtable's record limits quickly. Pruning old checks is on the list soon.
+- Imports match URLs exactly, so `https://example.org/page` and `https://example.org/page/` count as two different pages. Compressed (`.xml.gz`) sitemaps aren't supported, and an import stops after reading 50 sitemaps.
 - Claude only sees metadata and headings, not the body text, so reviews cover how findable and well-structured a page is rather than how well it's written.
 - If a page is deleted from Airtable between `content-audit` and `content-collect`, saving that batch fails.
 - GitHub doesn't guarantee exact start times for scheduled runs, and they can be delayed when it's busy. On public repos, scheduled workflows also pause after 60 days without any repository activity.
