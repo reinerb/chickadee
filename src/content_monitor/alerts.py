@@ -1,5 +1,8 @@
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
+
+import httpx
 
 from content_monitor.checker import CheckResult
 from content_monitor.history import describe_duration
@@ -44,3 +47,24 @@ def build_alert(
         "message": message,
         "test": test,
     }
+
+
+def send_alerts(
+    client: httpx.Client, webhook_url: str, alerts: Sequence[dict[str, Any]]
+) -> int:
+    failures = 0
+
+    for alert in alerts:
+        try:
+            response = client.post(webhook_url, json=alert)
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            failures += 1
+            print(
+                f"  alert failed for {alert['page']}: HTTP {exc.response.status_code}"
+            )
+        except httpx.RequestError as exc:
+            failures += 1
+            print(f"  alert failed for {alert['page']}: {type(exc).__name__}")
+
+    return failures
