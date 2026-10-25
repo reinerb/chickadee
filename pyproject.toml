@@ -8,6 +8,7 @@ requires-python = ">=3.14"
 dependencies = [
     "anthropic>=2.3.0",
     "beautifulsoup4>=4.15.0",
+    "defusedxml>=0.7.1",
     "httpx>=0.28.1",
     "pyairtable>=3.5.0.post1",
     "pydantic>=2.14.1",
@@ -19,6 +20,7 @@ content-monitor = "content_monitor:main"
 content-summary = "content_monitor.summary:main"
 content-audit = "content_monitor.audit:main"
 content-collect = "content_monitor.collect:main"
+content-import = "content_monitor.importer:main"
 
 [build-system]
 requires = ["uv_build>=0.11.26,<0.14.0"]
