@@ -2,7 +2,7 @@
 
 ![CI](https://github.com/reinerb/content-monitor/actions/workflows/ci.yml/badge.svg)
 
-Content Monitor keeps an eye on a list of web pages. Every hour it checks that each page is up, records the result in Airtable, and can send an alert the moment a page goes down or comes back. Once a week it pulls each page's title, description and headings, asks Claude to review them for search, and writes the score and suggestions back to Airtable.
+Content Monitor keeps an eye on a list of web pages. Every hour it checks that each page is up, records the result in Airtable, and can send an alert the moment a page goes down or comes back. Once a week it reads each page's content, notes what has changed since the last audit, and sends new or changed pages to Claude for a search review, with the score and suggestions written back to Airtable.
 
 I built this to get hands-on understanding of the Airtable and Claude APIs, and I wanted it to solve a problem content teams really have: finding out which pages are broken, slow, or hard to find in search without someone checking them by hand.
 
@@ -13,12 +13,12 @@ I built this to get hands-on understanding of the Airtable and Claude APIs, and 
 | `content-import` | Reads a site's sitemap and adds any pages that aren't being tracked yet |
 | `content-monitor` | Checks every active page, updates its current status, logs the check, and sends alerts for status changes |
 | `content-summary` | Asks Claude for a short, plain-English report on current status and the past week's outages |
-| `content-audit` | Pulls each page's title, meta description, headings and word count, saves them, and sends a batch of SEO reviews to Claude |
-| `content-collect` | Picks up finished review batches and saves Claude's score, suggested title and description, and list of issues |
+| `content-audit` | Reads each page's title, meta description, headings and main text, records whether it has changed, and sends new or changed pages to Claude for review |
+| `content-collect` | Picks up finished review batches and saves Claude's score, suggested title and description, and list of issues, along with which version of the page was reviewed |
 | `content-prune` | Deletes logged checks older than the retention period |
 | `content-test-alert` | Sends a sample alert to the alert webhook |
 
-Pages come into the Pages table from a sitemap or by hand. Each uptime check updates the page's current status and, depending on the logging mode, adds a row to Checks. When a page's status changes, the monitor posts an alert to a webhook. `content-summary` reads both tables. SEO data goes from Pages to Claude's Message Batches API and comes back onto Pages.
+Pages come into the Pages table from a sitemap or by hand. Each uptime check updates the page's current status and, depending on the logging mode, adds a row to Checks. When a page's status changes, the monitor posts an alert to a webhook. `content-summary` reads both tables. Each audit updates every page's content fingerprint, and only pages whose content has changed since their last review go to Claude's Message Batches API. The reviews come back onto Pages.
 
 ## How it's built
 
@@ -106,11 +106,23 @@ Durations are calculated in code, not by Claude. Language models are unreliable 
 
 It also lists pages I'm tracking that have dropped out of the sitemap, since those may have been moved or deleted. A `--dry-run` flag shows exactly what would be added before anything changes. Sitemaps come from sites I don't control, so they're parsed with `defusedxml`, which blocks the malicious-XML tricks that Python's standard parser is open to.
 
+### Tracking changes
+
+Each audit fingerprints every page: a short hash of its title, meta description and main text. Whitespace is collapsed first, and navigation, headers and footers are stripped, so reformatting or a new menu item doesn't count as a change. The fingerprint is the first 16 characters of a SHA-256 hash, which is plenty to tell versions of a page apart.
+
+The point is to review only what's new. Claude sees a page when it's first added and again whenever its content changes, rather than every page every week. For a stable site, a weekly batch is usually a handful of pages.
+
+Each page keeps two hashes. **Content hash** is what the page looks like now, updated by every audit. **Reviewed hash** is what it looked like when Claude last reviewed it successfully, written by `content-collect`. A page needs a review whenever the two differ. That means a failed review fixes itself: if a batch errors or never gets collected, the hashes stay different and the next audit sends the page again, without anything having to remember that something went wrong.
+
+The reviewed hash has to be the version Claude actually saw, not whatever the page looks like when the results come back. So the hash travels with the request, in the batch's custom ID next to the record ID. The API caps custom IDs at 64 characters, which is why the hash is short.
+
+A page's first audit sets a baseline and doesn't count as a change. To review everything anyway, for example after changing the prompt or the model, run `content-audit --all`.
+
 ### Working with Claude
 
 The SEO review is defined once as a Pydantic model. Its schema is sent with every request, so Claude's answer always comes back in the same shape and maps straight onto Airtable columns. The API can't enforce number ranges, so the 1 to 10 score is checked with Pydantic when results come in.
 
-Reviews go through the Message Batches API instead of one call per page. Nobody needs them instantly, and batch requests cost half as much. Each request uses the page's Airtable record ID as its custom ID, which is how a result finds its way back to the right row. Batches waiting to be collected are tracked in Airtable rather than a local file, so collection works the same from a scheduled job as from my laptop.
+Reviews go through the Message Batches API instead of one call per page. Nobody needs them instantly, and batch requests cost half as much. Each request's custom ID combines the page's Airtable record ID with its content hash, which is how a result finds its way back to the right row and records which version was reviewed. Batches waiting to be collected are tracked in Airtable rather than a local file, so collection works the same from a scheduled job as from my laptop.
 
 I chose models by trying them. The uptime summary uses Claude Haiku because the task is simple and Haiku is the cheapest option. The SEO review uses Claude Sonnet: I ran both models on the same pages, and Sonnet's critiques were noticeably more useful.
 
@@ -155,7 +167,8 @@ uv run content-import https://example.org/sitemap.xml --contains /blog/ --limit 
 uv run content-monitor    # check every active page
 uv run content-summary    # get Claude's take on current status and the past week
 
-uv run content-audit      # gather page content and send it for review
+uv run content-audit        # check for changes and send new or changed pages for review
+uv run content-audit --all  # review every page, changed or not
 uv run content-collect    # save any reviews that are ready
 
 uv run content-prune --dry-run    # count checks older than the retention period
@@ -168,6 +181,8 @@ uv run content-test-alert --recovered  # send a sample "back up" alert
 It's worth doing a dry run before every import. Real sitemaps often include tag, author and attachment pages you won't want to monitor, and `--contains` and `--limit` let you narrow things down. Run any command with `--help` to see its options.
 
 Most review batches finish within an hour, though they can take up to 24. You can run `content-collect` as often as you like. It tells you which batches are still processing and skips any it has already saved.
+
+Running `content-audit` twice in a row is a good check. The second run should report every page as unchanged. If one shows as changed when nobody edited it, something on it changes on every load, like a timestamp or a list of related posts, and the extractor needs to strip it.
 
 `content-prune` permanently deletes records, so try `--dry-run` first. Without `--days`, it uses the `RETENTION_DAYS` setting, and it refuses a value below 1, which would delete everything. To try the other logging mode for a single run, set it in front of the command: `CHECK_LOG=all uv run content-monitor`.
 
@@ -201,7 +216,7 @@ uv run pyright             # type check
 uv run pytest              # test
 ```
 
-The tests cover the pure functions: reading the storage settings, deciding when a check gets logged and when it triggers an alert, building alert payloads, turning a log into outage and recovery events, building Airtable formulas, turning results into Airtable fields, pulling content out of HTML, reading sitemaps, deciding which pages to import, and validating Claude's reviews. None of them touch the network, Airtable or Claude, so they run in a second and don't cost anything. That's also why CI can run them without credentials.
+The tests cover the pure functions: reading the storage settings, deciding when a check gets logged and when it triggers an alert, building alert payloads, turning a log into outage and recovery events, building Airtable formulas, turning results into Airtable fields, pulling content out of HTML and fingerprinting it, deciding which pages need review, building and reading batch custom IDs, reading sitemaps, deciding which pages to import, and validating Claude's reviews. None of them touch the network, Airtable or Claude, so they run in a second and don't cost anything. That's also why CI can run them without credentials.
 
 ## Airtable schema
 
@@ -228,6 +243,9 @@ Field names are case-sensitive and need to match exactly.
 | Suggested description | Long text |
 | SEO issues | Long text |
 | Last audited | Date with time |
+| Content hash | Single line text |
+| Content changed at | Date with time |
+| Reviewed hash | Single line text |
 
 "Last checked" is written by the monitor. It used to be a rollup of Checks, but in `changes` mode the newest logged check usually isn't the newest check.
 
@@ -259,7 +277,7 @@ src/content_monitor/
   __init__.py    content-monitor: uptime checks
   importer.py    content-import: decide which sitemap pages to add, and add them
   summary.py     content-summary: Claude's health report
-  audit.py       content-audit: gather page content and submit reviews
+  audit.py       content-audit: detect changes and submit reviews
   collect.py     content-collect: save finished reviews
   prune.py       content-prune: delete old checks
   alerts.py      alert rules, payloads and delivery, plus content-test-alert
@@ -268,9 +286,9 @@ src/content_monitor/
   history.py     turns logged checks into outage and recovery events
   formulas.py    Airtable formulas for filtering checks by date
   sitemap.py     reads sitemaps and sitemap indexes
-  extractor.py   pulls the title, description, headings and word count from HTML
-  reviewer.py    the review schema, prompt, batch requests and validation
-  store.py       turns results into Airtable fields and decides what gets logged
+  extractor.py   pulls the title, description, headings and main text from HTML, and fingerprints it
+  reviewer.py    the review schema, prompt, batch requests, custom IDs and validation
+  store.py       turns results into Airtable fields, and decides what gets logged and what needs review
 tests/
 make/
   alerts.blueprint.json   sample Make scenario for routing alerts
@@ -287,7 +305,8 @@ make/
 - Imports match URLs exactly, so `https://example.org/page` and `https://example.org/page/` count as two different pages. Compressed (`.xml.gz`) sitemaps aren't supported, and an import stops after reading 50 sitemaps.
 - If a page went down more than a week ago and has since recovered, the summary doesn't list it as an event. Its current status still shows how long it's been back up.
 - Every page is a record too, so very large imports can still reach the free plan's limit, whatever the logging mode.
-- Claude only sees metadata and headings, not the body text, so reviews cover how findable and well-structured a page is rather than how well it's written.
+- A change to a page's body text triggers a new review, but Claude still only sees the metadata and headings, so reviews cover how findable and well-structured a page is rather than what it says. Sending Claude the body text is the next step.
+- Anything that changes every time a page loads, like a timestamp, makes the page look edited and sends it for review every week. The extractor strips navigation, headers and footers, but other changing sections have to be added by hand.
 - If a page is deleted from Airtable between `content-audit` and `content-collect`, saving that batch fails.
 - GitHub doesn't guarantee exact start times for scheduled runs, and they can be delayed when it's busy. On public repos, scheduled workflows also pause after 60 days without any repository activity.
 - Every scheduled run counts as a deployment to the `production` environment, which clutters the repo's deployment history.
