@@ -30,6 +30,12 @@ def _meta_description(soup: BeautifulSoup) -> str | None:
     return None
 
 
+def content_hash(content: PageContent) -> str:
+    parts = [content.title or "", content.meta_description or "", content.text]
+    digest = hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()
+    return digest[:HASH_LENGTH]
+
+
 def extract_content(html: str) -> PageContent:
     soup = BeautifulSoup(html, "html.parser")
 
