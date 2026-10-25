@@ -1,9 +1,11 @@
 from datetime import UTC, datetime
 
 from content_monitor.checker import CheckResult
-from content_monitor.extractor import PageContent
+from content_monitor.extractor import PageContent, content_hash
 from content_monitor.reviewer import SeoReview
 from content_monitor.store import (
+    classify_change,
+    needs_review,
     should_log,
     to_check_fields,
     to_content_fields,
@@ -70,7 +72,7 @@ def test_connection_failure_omits_missing_values():
 
 
 def test_missing_title_is_sent_as_none_to_clear_old_value():
-    fields = to_content_fields(CONTENT)
+    fields = to_content_fields(CONTENT, content_hash(CONTENT), "new", datetime.now())
 
     assert "Current title" in fields
     assert fields["Current title"] is None
@@ -85,7 +87,7 @@ def test_review_fields_include_score_and_bulleted_issues():
         issues=["First problem", "Second problem"],
     )
 
-    fields = to_review_fields(review, CHECKED_AT)
+    fields = to_review_fields(review, CHECKED_AT, content_hash(CONTENT))
 
     assert fields["SEO score"] == 6
     assert fields["SEO issues"] == "- First problem\n- Second problem"
@@ -110,3 +112,24 @@ def test_status_since_only_moves_when_status_changes():
 
     assert "Status since" not in unchanged
     assert changed["Status since"] == CHECKED_AT.isoformat()
+
+
+def test_change_classification():
+    assert classify_change(None, "abc") == "new"
+    assert classify_change("abc", "abc") == "unchanged"
+    assert classify_change("abc", "xyz") == "changed"
+
+
+def test_review_needed_until_the_current_version_is_reviewed():
+    assert needs_review(None, "abc")
+    assert needs_review("old", "abc")
+    assert not needs_review("abc", "abc")
+
+
+def test_changed_at_is_only_set_for_real_changes():
+    new = to_content_fields(CONTENT, "abc", "new", CHECKED_AT)
+    changed = to_content_fields(CONTENT, "abc", "changed", CHECKED_AT)
+
+    assert "Content changed at" not in new
+    assert changed["Content changed at"] == CHECKED_AT.isoformat()
+    assert changed["Content hash"] == "abc"
