@@ -4,11 +4,7 @@ from datetime import UTC, datetime, timedelta
 from pyairtable import Api
 
 from content_monitor.config import load_options, load_settings
-
-
-def older_than_formula(cutoff: datetime) -> str:
-    stamp = cutoff.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-    return f"IS_BEFORE({{Checked at}}, DATETIME_PARSE('{stamp}'))"
+from content_monitor.formulas import checked_before
 
 
 def positive_int(value: str) -> int:
@@ -40,7 +36,7 @@ def main() -> None:
     days = args.days if args.days is not None else load_options().retention_days
 
     cutoff = datetime.now(UTC) - timedelta(days=days)
-    old = checks.all(formula=older_than_formula(cutoff), fields=["Checked at"])
+    old = checks.all(formula=checked_before(cutoff), fields=["Checked at"])
     print(f"Found {len(old)} check(s) older than {days} days")
 
     if args.dry_run:
