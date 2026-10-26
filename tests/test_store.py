@@ -3,7 +3,7 @@ from typing import Any
 
 from content_monitor.checker import CheckResult
 from content_monitor.extractor import PageContent, content_hash
-from content_monitor.links import LinkResult
+from content_monitor.results import LinkResult
 from content_monitor.reviewer import PageReview
 from content_monitor.store import (
     classify_change,

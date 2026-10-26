@@ -5,7 +5,7 @@ from typing import Any, Literal
 from content_monitor.checker import CheckResult
 from content_monitor.config import CheckLog
 from content_monitor.extractor import PageContent
-from content_monitor.links import LinkResult
+from content_monitor.results import LinkResult
 from content_monitor.reviewer import PageReview
 
 ContentChange = Literal["new", "changed", "unchanged"]

@@ -1,7 +1,6 @@
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Literal
 from urllib.parse import urlparse
 
 import httpx
@@ -11,20 +10,12 @@ from pyairtable.api.types import UpdateRecordDict
 from content_monitor.checker import make_client
 from content_monitor.config import load_settings
 from content_monitor.extractor import extract_links
+from content_monitor.results import LinkResult, LinkStatus
 from content_monitor.store import to_link_fields
-
-LinkStatus = Literal["ok", "broken", "unverified"]
 
 BROKEN_CODES = {404, 410}
 MAX_LINKS_PER_PAGE = 100
 PER_HOST_INTERVAL = 1.0
-
-
-@dataclass(frozen=True)
-class LinkResult:
-    url: str
-    status: LinkStatus
-    detail: str
 
 
 def classify(status_code: int) -> LinkStatus:
