@@ -1,10 +1,12 @@
 from datetime import UTC, datetime
+from typing import Any
 
 from content_monitor.checker import CheckResult
 from content_monitor.extractor import PageContent, content_hash
-from content_monitor.reviewer import SeoReview
+from content_monitor.reviewer import PageReview
 from content_monitor.store import (
     classify_change,
+    match_topics,
     needs_review,
     should_log,
     to_check_fields,
@@ -22,6 +24,21 @@ CONTENT = PageContent(
     word_count=250,
     text="Lorem ipsum, dolor sit amet consectetur adipisicing elit. Modi qui temporibus saepe eaque earum, molestiae autem in iure magnam asperiores distinctio explicabo. Beatae, ducimus fuga eaque quas repudiandae unde alias in numquam, enim sunt, laborum provident id placeat? Qui culpa adipisci consequuntur voluptas aliquid laudantium itaque dicta. Nesciunt soluta tempora esse amet, repudiandae a hic porro ex mollitia eaque voluptatem, nulla error reprehenderit non blanditiis totam. Nostrum sed quisquam ipsum hic laboriosam placeat necessitatibus neque? Sapiente omnis illum iure, aliquid adipisci quae nostrum quidem ipsam, libero velit neque vitae necessitatibus? Possimus eaque omnis sit mollitia beatae provident ad velit laboriosam obcaecati in quaerat, rerum eum ullam consequuntur molestiae ducimus nostrum assumenda accusantium voluptatem amet! Consequatur totam temporibus praesentium quasi maxime fuga quae officia neque perspiciatis, nemo possimus nostrum ratione nobis rem inventore? Placeat asperiores fugiat ipsam odio eius quod eligendi corporis, vero voluptatibus sapiente dolores soluta dolore laudantium quae. Repellat laboriosam corporis, omnis minus quis nulla excepturi veniam id ut, quod fugiat quasi expedita, beatae ex! Soluta minus ad labore vel asperiores quia, corporis officiis nobis, voluptas quo voluptatem accusamus dolore, totam animi repellat dolores enim earum saepe veritatis odio doloremque eos quas ullam impedit? Tempora, suscipit, explicabo quidem rerum molestiae quia inventore quasi eaque sit magni molestias enim a, voluptatum doloribus totam libero pariatur culpa ipsum ut reiciendis itaque minus sequi neque! Odit labore non temporibus ducimus atque dolorem ipsam soluta harum eum, repudiandae mollitia reiciendis fugiat saepe ut optio dolorum ex reprehenderit, voluptate iste error perferendis. Optio, tempore.",
 )
+
+
+def make_review(**overrides: Any) -> PageReview:
+    data = {
+        "content_summary": "A summary.",
+        "key_point": "The main finding.",
+        "key_point_up_front": True,
+        "topics": ["Fish"],
+        "score": 6,
+        "summary": "Decent.",
+        "suggested_title": "Title",
+        "suggested_description": "Description",
+        "issues": ["First problem", "Second problem"],
+    }
+    return PageReview(**(data | overrides))
 
 
 def make_result(ok: bool) -> CheckResult:
@@ -79,15 +96,11 @@ def test_missing_title_is_sent_as_none_to_clear_old_value():
 
 
 def test_review_fields_include_score_and_bulleted_issues():
-    review = SeoReview(
-        score=6,
-        summary="Decent.",
-        suggested_title="Title",
-        suggested_description="Description",
-        issues=["First problem", "Second problem"],
-    )
+    review = make_review()
 
-    fields = to_review_fields(review, CHECKED_AT, content_hash(CONTENT))
+    fields = to_review_fields(
+        review, CHECKED_AT, content_hash(CONTENT), ["Has problems"]
+    )
 
     assert fields["SEO score"] == 6
     assert fields["SEO issues"] == "- First problem\n- Second problem"
@@ -133,3 +146,24 @@ def test_changed_at_is_only_set_for_real_changes():
     assert "Content changed at" not in new
     assert changed["Content changed at"] == CHECKED_AT.isoformat()
     assert changed["Content hash"] == "abc"
+
+
+def test_topics_match_case_insensitively_and_report_unknowns():
+    ids = {"fish": "recFish", "farmed animals": "recFarm"}
+
+    matched, unknown = match_topics(["Fish", "farmed Animals", "fish", "Cats"], ids)
+
+    assert matched == ["recFish", "recFarm"]
+    assert unknown == ["Cats"]
+
+
+def test_key_point_is_saved_as_yes_or_no():
+    up_front = to_review_fields(make_review(), CHECKED_AT, "abc", ["recFish"])
+    buried = to_review_fields(
+        make_review(key_point_up_front=False), CHECKED_AT, "abc", []
+    )
+
+    assert up_front["Key point up front"] == "Yes"
+    assert buried["Key point up front"] == "No"
+    assert up_front["Topics"] == ["recFish"]
+    assert buried["Topics"] == []

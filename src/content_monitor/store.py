@@ -1,10 +1,11 @@
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from typing import Any, Literal
 
 from content_monitor.checker import CheckResult
 from content_monitor.config import CheckLog
 from content_monitor.extractor import PageContent
-from content_monitor.reviewer import SeoReview
+from content_monitor.reviewer import PageReview
 
 ContentChange = Literal["new", "changed", "unchanged"]
 
@@ -18,6 +19,23 @@ def classify_change(previous_hash: str | None, current_hash: str) -> ContentChan
 
 def needs_review(reviewed_hash: str | None, current_hash: str) -> bool:
     return reviewed_hash != current_hash
+
+
+def match_topics(
+    names: Sequence[str], topic_ids: Mapping[str, str]
+) -> tuple[list[str], list[str]]:
+    matched: list[str] = []
+    unknown: list[str] = []
+
+    for name in names:
+        record_id = topic_ids.get(name.strip().casefold())
+
+        if record_id is None:
+            unknown.append(name)
+        elif record_id not in matched:
+            matched.append(record_id)
+
+    return matched, unknown
 
 
 def to_check_fields(
@@ -53,15 +71,22 @@ def to_content_fields(
 
 
 def to_review_fields(
-    review: SeoReview, audited_at: datetime, reviewed_hash: str | None
+    review: PageReview,
+    reviewed_at: datetime,
+    reviewed_hash: str | None,
+    topic_ids: Sequence[str],
 ) -> dict[str, Any]:
     fields: dict[str, Any] = {
+        "Content summary": review.content_summary,
+        "Key point": review.key_point,
+        "Key point up front": "Yes" if review.key_point_up_front else "No",
+        "Topics": list(topic_ids),
         "SEO score": review.score,
         "SEO summary": review.summary,
         "Suggested title": review.suggested_title,
         "Suggested description": review.suggested_description,
         "SEO issues": "\n".join(f"- {issue}" for issue in review.issues),
-        "Last audited": audited_at.isoformat(),
+        "Last audited": reviewed_at.isoformat(),
     }
 
     if reviewed_hash is not None:
@@ -71,7 +96,7 @@ def to_review_fields(
 
 
 def to_audit_fields(
-    content: PageContent, review: SeoReview | None, audited_at: datetime
+    content: PageContent, review: PageReview | None, audited_at: datetime
 ) -> dict[str, Any]:
     fields: dict[str, Any] = {
         "Current title": content.title,
