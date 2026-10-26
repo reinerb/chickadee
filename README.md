@@ -2,7 +2,7 @@
 
 ![CI](https://github.com/reinerb/content-monitor/actions/workflows/ci.yml/badge.svg)
 
-Content Monitor keeps an eye on a list of web pages. Every hour it checks that each page is up, records the result in Airtable, and can send an alert the moment a page goes down or comes back. Once a week it reads each page's content, notes what has changed since the last audit, and sends new or changed pages to Claude, which summarizes each one, tags it by topic and reviews how easy it is to find. Everything is written back to Airtable.
+Content Monitor keeps an eye on a list of web pages. Every hour it checks that each page is up, records the result in Airtable, and can send an alert the moment a page goes down or comes back. Once a week it reads each page's content, notes what has changed since the last audit, and sends new or changed pages to Claude, which summarizes each one, tags it by topic and reviews how easy it is to find. It also checks the links on every page each week and records any that are broken. Everything is written back to Airtable.
 
 I built this to get hands-on understanding of the Airtable and Claude APIs, and I wanted it to solve a problem content teams really have: finding out which pages are broken, slow, or hard to find in search without someone checking them by hand.
 
@@ -15,10 +15,11 @@ I built this to get hands-on understanding of the Airtable and Claude APIs, and 
 | `content-summary` | Asks Claude for a short, plain-English report on current status and the past week's outages |
 | `content-audit` | Reads each page's title, meta description, headings and main text, records whether it has changed, and sends new or changed pages to Claude for review |
 | `content-collect` | Picks up finished review batches and saves Claude's summary, topics and review, along with which version of the page was reviewed |
+| `content-links` | Checks the links in each page's main content and records the broken ones |
 | `content-prune` | Deletes logged checks older than the retention period |
 | `content-test-alert` | Sends a sample alert to the alert webhook |
 
-Pages come into the Pages table from a sitemap or by hand. Each uptime check updates the page's current status and, depending on the logging mode, adds a row to Checks. When a page's status changes, the monitor posts an alert to a webhook. `content-summary` reads both tables. Each audit updates every page's content fingerprint, and only pages whose content has changed since their last review go to Claude's Message Batches API. The reviews come back onto Pages.
+Pages come into the Pages table from a sitemap or by hand. Each uptime check updates the page's current status and, depending on the logging mode, adds a row to Checks. When a page's status changes, the monitor posts an alert to a webhook. `content-summary` reads both tables. Each audit updates every page's content fingerprint, and only pages whose content has changed since their last review go to Claude's Message Batches API. The reviews come back onto Pages. A weekly link check records broken links on each page too.
 
 ## How it's built
 
@@ -134,9 +135,27 @@ Reviews go through the Message Batches API instead of one call per page. Nobody 
 
 I chose models by trying them. The uptime summary uses Claude Haiku because the task is simple and Haiku is the cheapest option. The page review uses Claude Sonnet: I ran both models on the same pages, and Sonnet's critiques were noticeably more useful.
 
+### Checking links
+
+`content-links` checks the links inside each page's main content. It uses the same definition of main content as change tracking: navigation, headers and footers are stripped first, so a broken menu link doesn't get reported on every page in the site. Relative links are resolved against the page's final address after any redirects, fragments like `#methods` are removed, and links that can't be checked over HTTP, such as `mailto:`, are skipped.
+
+Each unique link is checked once, however many pages use it, and the result is shared. Requests to the same site wait a second between them, while links to different sites don't wait for each other. Each check streams the response and stops at the status code, so no page bodies are downloaded. That also works with servers that handle HEAD requests badly.
+
+A link checker that flags working links quickly stops being trusted, so results are split three ways:
+
+| Result | What counts |
+|---|---|
+| Broken | 404 or 410, a domain that doesn't exist or refuses connections, or a malformed link |
+| Unverified | 403, 429, server errors and timeouts, which usually mean a site is blocking automated requests or is briefly down |
+| OK | Anything that ends in success after following redirects |
+
+Broken and unverified links go in separate fields, so the broken list stays reliable. Once a link is fixed, it drops off on the next run.
+
+Link checking is its own command rather than part of the audit. It makes a lot of requests and no calls to Claude, so it gets its own schedule and timeout. Finding broken links doesn't fail the run, because they're findings about the content, not a fault in the tool.
+
 ### Fetching pages
 
-Requests identify the tool with a User-Agent and give up after 10 seconds. Audits and sitemap imports also wait a second between requests so they don't hammer anyone's site.
+Requests identify the tool with a User-Agent and give up after 10 seconds. Audits and sitemap imports wait a second between requests, and link checks wait a second between requests to the same site, so none of them hammer anyone's site.
 
 ## Setup
 
@@ -162,7 +181,7 @@ You'll need [uv](https://docs.astral.sh/uv/), which takes care of installing the
    ```
    The base ID is just the `app...` part of the base's URL.
 
-Only the commands that talk to Claude need the Claude key. `content-import`, `content-monitor` and `content-prune` run without it.
+Only the commands that talk to Claude need the Claude key. `content-import`, `content-monitor`, `content-links` and `content-prune` run without it.
 
 To set up alerts, point `ALERT_WEBHOOK_URL` at your webhook and run `uv run content-test-alert`. If your tool learns the payload's structure from a sample, as Make does, send it this first sample: it fills in every field.
 
@@ -178,6 +197,7 @@ uv run content-summary    # get Claude's take on current status and the past wee
 uv run content-audit        # check for changes and send new or changed pages for review
 uv run content-audit --all  # review every page, changed or not
 uv run content-collect    # save any reviews that are ready
+uv run content-links      # check the links on every active page
 
 uv run content-prune --dry-run    # count checks older than the retention period
 uv run content-prune --days 30    # delete checks older than 30 days
@@ -192,24 +212,27 @@ Most review batches finish within an hour, though they can take up to 24. You ca
 
 Running `content-audit` twice in a row is a good check. The second run should report every page as unchanged. If one shows as changed when nobody edited it, something on it changes on every load, like a timestamp or a list of related posts, and the extractor needs to strip it.
 
+When `content-links` lists a link as unverified, try opening it in a browser. Most load fine, and the site is just blocking automated requests.
+
 `content-prune` permanently deletes records, so try `--dry-run` first. Without `--days`, it uses the `RETENTION_DAYS` setting, and it refuses a value below 1, which would delete everything. To try the other logging mode for a single run, set it in front of the command: `CHECK_LOG=all uv run content-monitor`.
 
 When you change how alerts are routed, test both kinds. An outage and a recovery usually take different paths, and it's easy to break one while checking only the other.
 
 ## Automation
 
-Four GitHub Actions workflows run the tool on a schedule. All times are UTC.
+Five GitHub Actions workflows run the tool on a schedule. All times are UTC.
 
 | Workflow | When it runs | Command |
 |---|---|---|
 | `monitor.yml` | Every hour at :17 | `content-monitor` |
 | `audit.yml` | Mondays at 10:23 | `content-audit`, then `content-summary` |
 | `collect.yml` | Every 6 hours | `content-collect` |
+| `links.yml` | Thursdays at 09:37 | `content-links` |
 | `prune.yml` | Daily at 04:43 | `content-prune` |
 
 Each one can also be started by hand from the Actions tab. Importing isn't scheduled, since it's worth checking a dry run before adding pages. The weekly uptime summary appears on the audit run's page.
 
-The credentials live in a GitHub environment called `production`, which only the `main` branch can use, so they're only ever available to code that's already been merged. Inside each workflow, credentials are passed only to the step that needs them. The uptime and prune workflows never get the Claude key, and only the uptime workflow gets the alert webhook. Each workflow has its own timeout and won't start a new run while the previous one is still going.
+The credentials live in a GitHub environment called `production`, which only the `main` branch can use, so they're only ever available to code that's already been merged. Inside each workflow, credentials are passed only to the step that needs them. The uptime, link-check and prune workflows never get the Claude key, and only the uptime workflow gets the alert webhook. Each workflow has its own timeout and won't start a new run while the previous one is still going.
 
 To turn on alerts for scheduled runs, add `ALERT_WEBHOOK_URL` as a secret in the `production` environment. To change the storage settings, add `CHECK_LOG` or `RETENTION_DAYS` as variables there. If they're not set, alerts are skipped and the defaults apply.
 
@@ -224,7 +247,7 @@ uv run pyright             # type check
 uv run pytest              # test
 ```
 
-The tests cover the pure functions: reading the storage settings, deciding when a check gets logged and when it triggers an alert, building alert payloads, turning a log into outage and recovery events, building Airtable formulas, turning results into Airtable fields, pulling content out of HTML and fingerprinting it, deciding which pages need review, building and reading batch custom IDs, reading sitemaps, deciding which pages to import, building review prompts and schemas, cutting long pages down, matching topics, and validating Claude's reviews. None of them touch the network, Airtable or Claude, so they run in a second and don't cost anything. That's also why CI can run them without credentials.
+The tests cover the pure functions: reading the storage settings, deciding when a check gets logged and when it triggers an alert, building alert payloads, turning a log into outage and recovery events, building Airtable formulas, turning results into Airtable fields, pulling content out of HTML and fingerprinting it, deciding which pages need review, building and reading batch custom IDs, reading sitemaps, deciding which pages to import, building review prompts and schemas, cutting long pages down, matching topics, validating Claude's reviews, finding the links in a page, classifying link checks, and pacing requests to each site. None of them touch the network, Airtable or Claude, so they run in a second and don't cost anything. The link checker is tested with httpx's `MockTransport`, which answers each request with whatever the test specifies, so even the network code runs without a network. That's also why CI can run them without credentials.
 
 ## Airtable schema
 
@@ -258,6 +281,10 @@ Field names are case-sensitive and need to match exactly.
 | Content hash | Single line text |
 | Content changed at | Date with time |
 | Reviewed hash | Single line text |
+| Broken links | Long text |
+| Unverified links | Long text |
+| Broken link count | Number |
+| Links checked at | Date with time |
 
 "Last checked" is written by the monitor. It used to be a rollup of Checks, but in `changes` mode the newest logged check usually isn't the newest check. "Key point up front" is a single select rather than a checkbox for the same reason Status is.
 
@@ -299,20 +326,21 @@ src/content_monitor/
   audit.py       content-audit: detect changes and submit reviews
   collect.py     content-collect: save finished reviews
   prune.py       content-prune: delete old checks
+  links.py       content-links: check the links in each page
   alerts.py      alert rules, payloads and delivery, plus content-test-alert
   config.py      reads credentials and settings from the environment or .env
   checker.py     the shared HTTP client and single-page check
   history.py     turns logged checks into outage and recovery events
   formulas.py    Airtable formulas for filtering checks by date
   sitemap.py     reads sitemaps and sitemap indexes
-  extractor.py   pulls the title, description, headings and main text from HTML, and fingerprints it
+  extractor.py   pulls the title, description, headings, main text and links from HTML, and fingerprints the content
   reviewer.py    the review schema, prompt, topics, batch requests, custom IDs and validation
   store.py       turns results into Airtable fields, matches topics, and decides what gets logged and what needs review
 tests/
 make/
   alerts.blueprint.json   sample Make scenario for routing alerts
 .github/
-  workflows/     CI plus the four scheduled jobs
+  workflows/     CI plus the five scheduled jobs
   dependabot.yml
 ```
 
@@ -330,4 +358,5 @@ make/
 - If a page is deleted from Airtable between `content-audit` and `content-collect`, saving that batch fails.
 - GitHub doesn't guarantee exact start times for scheduled runs, and they can be delayed when it's busy. On public repos, scheduled workflows also pause after 60 days without any repository activity.
 - Every scheduled run counts as a deployment to the `production` environment, which clutters the repo's deployment history.
-- Links within pages aren't checked yet.
+- Link checks only catch links that fail outright. A link that redirects to a site's homepage, or to a "page not found" message sent with a success code, looks fine.
+- Each page's link check stops after its first 100 links.
