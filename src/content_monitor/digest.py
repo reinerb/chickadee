@@ -11,10 +11,16 @@ from markdown_it import MarkdownIt
 from pyairtable import Api
 from pyairtable.api.types import RecordDict
 
-from content_monitor.config import load_anthropic_key, load_settings
+from content_monitor.checker import make_client
+from content_monitor.config import (
+    load_anthropic_key,
+    load_digest_webhook,
+    load_settings,
+)
 from content_monitor.flags import ALL_FLAGS
 from content_monitor.formulas import checked_after
 from content_monitor.history import Event, describe_duration, find_events
+from content_monitor.webhooks import post_json
 
 MODEL = "claude-haiku-5-5"
 DIGEST_DAYS = 7
@@ -288,6 +294,10 @@ def main() -> None:
         action="store_true",
         help="skip Claude's opening paragraph",
     )
+    parser.add_argument("--test", action="store_true", help="mark the email as a test")
+    parser.add_argument(
+        "--no-send", action="store_true", help="print the digest without emailing it"
+    )
     args = parser.parse_args()
 
     settings = load_settings()
@@ -315,16 +325,46 @@ def main() -> None:
     if not args.no_overview:
         overview = write_overview(claude_input(new, changed, flagged, down, events))
 
-    print(
-        render_digest(
-            since=since,
-            until=now,
-            overview=overview,
-            new=new,
-            changed=changed,
-            flagged=flagged,
-            flag_counts=flag_counts,
-            down=down,
-            events=events,
-        )
+    markdown_text = render_digest(
+        since=since,
+        until=now,
+        overview=overview,
+        new=new,
+        changed=changed,
+        flagged=flagged,
+        flag_counts=flag_counts,
+        down=down,
+        events=events,
     )
+    print(markdown_text)
+
+    if args.no_send:
+        return
+
+    webhook_url = load_digest_webhook()
+    if not webhook_url:
+        print(
+            "DIGEST_WEBHOOK_URL isn't set, so the digest wasn't emailed.",
+            file=sys.stderr,
+        )
+        return
+
+    payload = build_digest_payload(
+        markdown_text=markdown_text,
+        since=since,
+        until=now,
+        new=len(new),
+        changed=len(changed),
+        needs_attention=len(flagged),
+        down=len(down),
+        test=args.test,
+    )
+
+    with make_client() as client:
+        error = post_json(client, webhook_url, payload)
+
+    if error:
+        print(f"Digest delivery failed: {error}", file=sys.stderr)
+        sys.exit(1)
+
+    print("Digest emailed.", file=sys.stderr)
