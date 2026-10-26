@@ -89,3 +89,8 @@ def load_options() -> Options:
 def load_alert_webhook() -> str | None:
     load_dotenv()
     return os.getenv("ALERT_WEBHOOK_URL") or None
+
+
+def load_digest_webhook() -> str | None:
+    load_dotenv()
+    return os.getenv("DIGEST_WEBHOOK_URL") or None
