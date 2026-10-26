@@ -24,6 +24,7 @@ content-import = "content_monitor.importer:main"
 content-prune = "content_monitor.prune:main"
 content-test-alert = "content_monitor.alerts:main"
 content-links = "content_monitor.links:main"
+content-flags = "content_monitor.flags:main"
 
 [build-system]
 requires = ["uv_build>=0.11.26,<0.14.0"]

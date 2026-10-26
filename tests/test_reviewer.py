@@ -59,7 +59,7 @@ def test_truncation_happens_at_word_boundaries():
 
 
 def test_review_tells_claude_when_text_was_cut_off():
-    content = PageContent(None, None, (), (), 4, "one two three four")
+    content = PageContent(None, None, (), (), 4, "one two three four", modified_at=None)
 
     cut = format_page_for_review("https://example.org/", content, max_words=2)
     whole = format_page_for_review("https://example.org/", content)

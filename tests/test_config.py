@@ -25,3 +25,8 @@ def test_unknown_mode_is_rejected():
 def test_zero_retention_is_rejected():
     with pytest.raises(RuntimeError):
         parse_options({"RETENTION_DAYS": "0"})
+
+
+def test_stale_setting_defaults_to_a_year():
+    assert parse_options({}).stale_after_days == 365
+    assert parse_options({"STALE_AFTER_DAYS": "730"}).stale_after_days == 730

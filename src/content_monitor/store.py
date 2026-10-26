@@ -63,6 +63,9 @@ def to_content_fields(
         "Current description": content.meta_description,
         "Word count": content.word_count,
         "Content hash": current_hash,
+        "Page modified at": content.modified_at.isoformat()
+        if content.modified_at is not None
+        else None,
     }
 
     if change == "changed":
