@@ -6,7 +6,7 @@ from pyairtable.api.types import UpdateRecordDict
 
 from content_monitor.config import load_anthropic_key, load_settings
 from content_monitor.reviewer import parse_custom_id, parse_review
-from content_monitor.store import to_review_fields
+from content_monitor.store import match_topics, to_review_fields
 
 
 def main() -> None:
@@ -14,6 +14,15 @@ def main() -> None:
     api = Api(settings.airtable_token)
     pages = api.table(settings.airtable_base_id, "Pages")
     batches = api.table(settings.airtable_base_id, "Audit batches")
+
+    topic_ids = {
+        record["fields"]["Name"].strip().casefold(): record["id"]
+        for record in api.table(settings.airtable_base_id, "Topics").all(
+            fields=["Name"]
+        )
+        if record["fields"].get("Name")
+    }
+
     claude = Anthropic(api_key=load_anthropic_key())
 
     pending = batches.all(formula="NOT({Collected})")
@@ -43,11 +52,17 @@ def main() -> None:
                 print(f"  {result.custom_id}: no usable review")
                 continue
 
+            matched, unknown = match_topics(review.topics, topic_ids)
+            if unknown:
+                print(f"  {result.custom_id}: unknown topic(s): {', '.join(unknown)}")
+
             record_id, reviewed_hash = parse_custom_id(result.custom_id)
             updates.append(
                 {
                     "id": record_id,
-                    "fields": to_review_fields(review, reviewed_at, reviewed_hash),
+                    "fields": to_review_fields(
+                        review, reviewed_at, reviewed_hash, matched
+                    ),
                 }
             )
 
