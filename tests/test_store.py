@@ -3,6 +3,7 @@ from typing import Any
 
 from content_monitor.checker import CheckResult
 from content_monitor.extractor import PageContent, content_hash
+from content_monitor.results import LinkResult
 from content_monitor.reviewer import PageReview
 from content_monitor.store import (
     classify_change,
@@ -11,6 +12,7 @@ from content_monitor.store import (
     should_log,
     to_check_fields,
     to_content_fields,
+    to_link_fields,
     to_review_fields,
     to_status_fields,
 )
@@ -167,3 +169,26 @@ def test_key_point_is_saved_as_yes_or_no():
     assert buried["Key point up front"] == "No"
     assert up_front["Topics"] == ["recFish"]
     assert buried["Topics"] == []
+
+
+def test_link_fields_separate_broken_from_unverified():
+    fields = to_link_fields(
+        [
+            LinkResult("https://a.example/", "broken", "404"),
+            LinkResult("https://b.example/", "unverified", "403"),
+            LinkResult("https://c.example/", "ok", "200"),
+        ],
+        CHECKED_AT,
+    )
+
+    assert fields["Broken links"] == "https://a.example/ (404)"
+    assert fields["Unverified links"] == "https://b.example/ (403)"
+    assert fields["Broken link count"] == 1
+
+
+def test_fixed_links_are_cleared():
+    fields = to_link_fields([LinkResult("https://a.example/", "ok", "200")], CHECKED_AT)
+
+    assert "Broken links" in fields
+    assert fields["Broken links"] is None
+    assert fields["Broken link count"] == 0
