@@ -1,4 +1,9 @@
-from content_monitor.extractor import HASH_LENGTH, content_hash, extract_content
+from content_monitor.extractor import (
+    HASH_LENGTH,
+    content_hash,
+    extract_content,
+    extract_links,
+)
 
 SAMPLE = """
 <html>
@@ -16,6 +21,19 @@ SAMPLE = """
     </main>
   </body>
 </html>
+"""
+LINK_PAGE = """
+<html><body>
+  <nav><a href="/about/">About</a></nav>
+  <main>
+    <a href="/research/fish/">Fish</a>
+    <a href="https://doi.org/10.1000/xyz#section-2">Study</a>
+    <a href="https://doi.org/10.1000/xyz">Same study</a>
+    <a href="#top">Back to top</a>
+    <a href="mailto:hello@example.org">Email</a>
+    <a>No link</a>
+  </main>
+</body></html>
 """
 
 
@@ -66,3 +84,12 @@ def test_hash_changes_when_the_text_or_title_changes():
     assert content_hash(base) != content_hash(edited)
     assert content_hash(base) != content_hash(retitled)
     assert len(content_hash(base)) == HASH_LENGTH
+
+
+def test_links_are_resolved_deduplicated_and_filtered():
+    links = extract_links(LINK_PAGE, "https://example.org/library/page/")
+
+    assert links == [
+        "https://example.org/research/fish/",
+        "https://doi.org/10.1000/xyz",
+    ]
