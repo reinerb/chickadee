@@ -17,7 +17,7 @@ dependencies = [
 
 [project.scripts]
 content-monitor = "content_monitor:main"
-content-summary = "content_monitor.summary:main"
+content-digest = "content_monitor.digest:main"
 content-audit = "content_monitor.audit:main"
 content-collect = "content_monitor.collect:main"
 content-import = "content_monitor.importer:main"
