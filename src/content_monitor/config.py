@@ -18,6 +18,18 @@ class Settings:
 class Options:
     check_log: CheckLog
     retention_days: int
+    stale_after_days: int
+
+
+def _positive_int(env: Mapping[str, str], name: str, default: int) -> int:
+    text = env.get(name) or str(default)
+    try:
+        value = int(text)
+    except ValueError:
+        raise RuntimeError(f"{name} must be a whole number, not {text!r}.") from None
+    if value < 1:
+        raise RuntimeError(f"{name} must be at least 1.")
+    return value
 
 
 def load_settings() -> Settings:
@@ -60,20 +72,13 @@ def load_anthropic_key() -> str:
 def parse_options(env: Mapping[str, str]) -> Options:
     check_log = env.get("CHECK_LOG") or "changes"
     if check_log not in ("all", "changes"):
-        raise RuntimeError(f"CHECK_LOG must be 'all' or 'changes', not {check_log!r}")
+        raise RuntimeError(f"CHECK_LOG must be 'all' or 'changes', not {check_log!r}.")
 
-    days_text = env.get("RETENTION_DAYS") or "90"
-    try:
-        retention_days = int(days_text)
-    except ValueError:
-        raise RuntimeError(
-            f"RETENTION_DAYS must be a whole number, not {days_text!r}."
-        ) from None
-
-    if retention_days < 1:
-        raise RuntimeError("RETENTION_DAYS must be at least 1.")
-
-    return Options(check_log=check_log, retention_days=retention_days)
+    return Options(
+        check_log=check_log,
+        retention_days=_positive_int(env, "RETENTION_DAYS", 90),
+        stale_after_days=_positive_int(env, "STALE_AFTER_DAYS", 365),
+    )
 
 
 def load_options() -> Options:
