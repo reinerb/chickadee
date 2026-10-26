@@ -1,9 +1,10 @@
 import hashlib
 from dataclasses import dataclass
 
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 
 HASH_LENGTH = 16
+STRIPPED = "script, style, noscript, nav, header, footer"
 
 
 @dataclass(frozen=True)
@@ -14,6 +15,13 @@ class PageContent:
     h2s: tuple[str, ...]
     word_count: int
     text: str
+
+
+def _main_element(soup: BeautifulSoup) -> Tag:
+    for tag in soup.select(STRIPPED):
+        tag.decompose()
+
+    return soup.select_one("main") or soup.body or soup
 
 
 def _meta_description(soup: BeautifulSoup) -> str | None:
@@ -44,10 +52,7 @@ def extract_content(html: str) -> PageContent:
     h2s = tuple(h.get_text(" ", strip=True) for h in soup.select("h2"))
     description = _meta_description(soup)
 
-    for tag in soup.select("script, style, noscript, nav, header, footer"):
-        tag.decompose()
-
-    body = soup.select_one("main") or soup.body or soup
+    body = _main_element(soup)
     text = " ".join(body.get_text(" ", strip=True).split())
 
     return PageContent(
