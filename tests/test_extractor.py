@@ -1,8 +1,14 @@
+from datetime import UTC, datetime
+
+from bs4 import BeautifulSoup
+
 from content_monitor.extractor import (
     HASH_LENGTH,
     content_hash,
     extract_content,
     extract_links,
+    page_modified_at,
+    parse_page_date,
 )
 
 SAMPLE = """
@@ -41,6 +47,12 @@ def page(title: str, body: str, nav: str = "Home") -> str:
     return (
         f"<html><head><title>{title}</title></head>"
         f"<body><nav>{nav}</nav><main>{body}</main></body></html>"
+    )
+
+
+def head(tags: str) -> BeautifulSoup:
+    return BeautifulSoup(
+        f"<html><head>{tags}</head><body></body></html>", "html.parser"
     )
 
 
@@ -93,3 +105,18 @@ def test_links_are_resolved_deduplicated_and_filtered():
         "https://example.org/research/fish/",
         "https://doi.org/10.1000/xyz",
     ]
+
+
+def test_modified_date_is_preferred_and_converted_to_utc():
+    soup = head(
+        '<meta property="article:published_time" content="2024-01-01T00:00:00+00:00">'
+        '<meta property="article:modified_time" content="2025-06-01T09:30:00-04:00">'
+    )
+
+    assert page_modified_at(soup) == datetime(2025, 6, 1, 13, 30, tzinfo=UTC)
+
+
+def test_missing_or_unreadable_dates_are_ignored():
+    assert page_modified_at(head("")) is None
+    assert parse_page_date("not a date") is None
+    assert parse_page_date("2024-03-05") == datetime(2024, 3, 5, tzinfo=UTC)
