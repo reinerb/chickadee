@@ -1,5 +1,6 @@
 import hashlib
 from dataclasses import dataclass
+from urllib.parse import urldefrag, urljoin, urlparse
 
 from bs4 import BeautifulSoup, Tag
 
@@ -63,3 +64,23 @@ def extract_content(html: str) -> PageContent:
         word_count=len(text.split()),
         text=text,
     )
+
+
+def extract_links(html: str, page_url: str) -> list[str]:
+    soup = BeautifulSoup(html, "html.parser")
+    page, _ = urldefrag(page_url)
+
+    links: list[str] = []
+
+    for anchor in _main_element(soup).select("a[href]"):
+        href = anchor.get("href")
+
+        if not isinstance(href, str):
+            continue
+
+        url, _ = urldefrag(urljoin(page_url, href.strip()))
+
+        if urlparse(url).scheme in ("http", "https") and url != page:
+            links.append(url)
+
+    return list(dict.fromkeys(links))
