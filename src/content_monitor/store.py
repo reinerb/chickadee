@@ -5,6 +5,7 @@ from typing import Any, Literal
 from content_monitor.checker import CheckResult
 from content_monitor.config import CheckLog
 from content_monitor.extractor import PageContent
+from content_monitor.links import LinkResult
 from content_monitor.reviewer import PageReview
 
 ContentChange = Literal["new", "changed", "unchanged"]
@@ -145,3 +146,17 @@ def to_status_fields(
         fields["Status since"] = checked_at.isoformat()
 
     return fields
+
+
+def to_link_fields(
+    results: Sequence[LinkResult], checked_at: datetime
+) -> dict[str, Any]:
+    broken = [r for r in results if r.status == "broken"]
+    unverified = [r for r in results if r.status == "unverified"]
+    return {
+        "Broken links": "\n".join(f"{r.url} ({r.detail})" for r in broken) or None,
+        "Unverified links": "\n".join(f"{r.url} ({r.detail})" for r in unverified)
+        or None,
+        "Broken link count": len(broken),
+        "Links checked at": checked_at.isoformat(),
+    }
