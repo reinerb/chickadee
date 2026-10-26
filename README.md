@@ -2,7 +2,7 @@
 
 ![CI](https://github.com/reinerb/content-monitor/actions/workflows/ci.yml/badge.svg)
 
-Content Monitor keeps an eye on a list of web pages. Every hour it checks that each page is up, records the result in Airtable, and can send an alert the moment a page goes down or comes back. Once a week it reads each page's content, notes what has changed since the last audit, and sends new or changed pages to Claude, which summarizes each one, tags it by topic and reviews how easy it is to find. It also checks the links on every page each week and records any that are broken. Every day it pulls all of that together into a list of pages that need attention. Everything is written back to Airtable.
+Content Monitor keeps an eye on a list of web pages. Every hour it checks that each page is up, records the result in Airtable, and can send an alert the moment a page goes down or comes back. Once a week it reads each page's content, notes what has changed since the last audit, and sends new or changed pages to Claude, which summarizes each one, tags it by topic and reviews how easy it is to find. It also checks the links on every page each week and records any that are broken. Every day it pulls all of that together into a list of pages that need attention, and once a week it emails the team a digest of what's new, what changed and what needs work. Everything is written back to Airtable.
 
 I built this to get hands-on understanding of the Airtable and Claude APIs, and I wanted it to solve a problem content teams really have: finding out which pages are broken, slow, or hard to find in search without someone checking them by hand.
 
@@ -12,15 +12,15 @@ I built this to get hands-on understanding of the Airtable and Claude APIs, and 
 |---|---|
 | `content-import` | Reads a site's sitemap and adds any pages that aren't being tracked yet |
 | `content-monitor` | Checks every active page, updates its current status, logs the check, and sends alerts for status changes |
-| `content-summary` | Asks Claude for a short, plain-English report on current status and the past week's outages |
 | `content-audit` | Reads each page's title, meta description, headings and main text, records whether it has changed, and sends new or changed pages to Claude for review |
 | `content-collect` | Picks up finished review batches and saves Claude's summary, topics and review, along with which version of the page was reviewed |
 | `content-links` | Checks the links in each page's main content and records the broken ones |
 | `content-flags` | Flags pages that need attention: down, broken links, stale, a low score, missing metadata or a buried key point |
+| `content-digest` | Writes a weekly digest of new, changed and flagged pages and uptime, and emails it |
 | `content-prune` | Deletes logged checks older than the retention period |
 | `content-test-alert` | Sends a sample alert to the alert webhook |
 
-Pages come into the Pages table from a sitemap or by hand. Each uptime check updates the page's current status and, depending on the logging mode, adds a row to Checks. When a page's status changes, the monitor posts an alert to a webhook. `content-summary` reads both tables. Each audit updates every page's content fingerprint, and only pages whose content has changed since their last review go to Claude's Message Batches API. The reviews come back onto Pages. A weekly link check records broken links on each page too, and a daily pass turns all of it into attention flags.
+Pages come into the Pages table from a sitemap or by hand. Each uptime check updates the page's current status and, depending on the logging mode, adds a row to Checks. When a page's status changes, the monitor posts an alert to a webhook. Each audit updates every page's content fingerprint, and only pages whose content has changed since their last review go to Claude's Message Batches API. The reviews come back onto Pages. A weekly link check records broken links on each page too, and a daily pass turns all of it into attention flags. Once a week, `content-digest` reads both tables and sends a summary to another webhook for email.
 
 ## How it's built
 
@@ -53,7 +53,7 @@ The defaults suit the free plan. In `changes` mode, healthy pages add nothing to
 
 When a page goes down or comes back up, the monitor sends a JSON payload to whatever URL is in `ALERT_WEBHOOK_URL`. It works with anything that accepts a webhook: an automation platform like Make, Zapier or n8n, a chat tool's incoming webhook, or a small service of your own. Leave the setting out and the monitor runs exactly the same, just without alerts.
 
-I tested it with [Make](https://www.make.com/). The `make/` folder has the scenario I use, as a sample to import and adapt: it posts every alert to Discord and emails outages. Each channel is on its own route, so a failure in one can't block the other, and a failed email is retried three times, 15 minutes apart. You'll need to create your own webhook and connect your own accounts, since connections don't carry over between Make accounts. Routing could just as easily send outages to Slack, open a ticket, or text whoever's on call.
+I tested it with [Make](https://www.make.com/). `make/alerts.blueprint.json` is the scenario I use, as a sample to import and adapt: it posts every alert to Discord and emails outages. Each channel is on its own route, so a failure in one can't block the other, and a failed email is retried three times, 15 minutes apart. You'll need to create your own webhook and connect your own accounts, since connections don't carry over between Make accounts. Routing could just as easily send outages to Slack, open a ticket, or text whoever's on call.
 
 The split is deliberate. Python decides when to alert and what the message says, in code that's tested. The webhook's receiver decides where alerts go, so someone without access to the code can change that.
 
@@ -96,12 +96,6 @@ Each payload looks like this:
 
 Every payload has every field, even when the value is `null`. Tools like Make learn a webhook's structure from a sample, so the shape has to stay the same.
 
-### Summaries
-
-The summary works the same whichever logging mode is in use. It sends Claude two things: each active page's current status, and the outages and recoveries from the past week. Those events are worked out in Python from whatever is in the log. In `all` mode, a run of hourly checks collapses into a single "went down" and a single "came back up," so the cost of a summary stays small however much is stored.
-
-Durations are calculated in code, not by Claude. Language models are unreliable at date arithmetic, so the prompt hands over finished durations and tells Claude to use them as given. Empty sections are sent as "(none)" rather than left blank, so Claude can tell "nothing happened" from "no data."
-
 ### Importing pages
 
 `content-import` reads a sitemap, follows any sitemap indexes down to the actual lists of pages, and adds the pages that aren't tracked yet. It only ever creates records. An upsert would have been simpler, but it would also have switched monitoring back on for pages I'd deliberately paused, so existing rows are left alone.
@@ -134,7 +128,7 @@ Page text is written by people outside the project, so it's treated as untrusted
 
 Reviews go through the Message Batches API instead of one call per page. Nobody needs them instantly, and batch requests cost half as much. Each request's custom ID combines the page's Airtable record ID with its content hash, which is how a result finds its way back to the right row and records which version was reviewed. Batches waiting to be collected are tracked in Airtable rather than a local file, so collection works the same from a scheduled job as from my laptop.
 
-I chose models by trying them. The uptime summary uses Claude Haiku because the task is simple and Haiku is the cheapest option. The page review uses Claude Sonnet: I ran both models on the same pages, and Sonnet's critiques were noticeably more useful.
+I chose models by trying them. The digest's opening paragraph uses Claude Haiku because the task is simple and Haiku is the cheapest option. The page review uses Claude Sonnet: I ran both models on the same pages, and Sonnet's critiques were noticeably more useful.
 
 ### Checking links
 
@@ -175,6 +169,26 @@ Staleness is measured from the most recent of three dates: the modified date the
 
 The rules live in Python rather than Airtable formula fields, so they're tested, versioned, and can be reused by anything else that needs them. The command runs daily and only writes to pages whose flags have changed, so most runs touch almost nothing. The staleness period is a setting, `STALE_AFTER_DAYS`, because what counts as out of date differs from one organization to the next. The score threshold isn't.
 
+### The weekly digest
+
+`content-digest` writes a weekly report for staff with four sections: new pages, changed pages, what needs attention, and uptime. Each new or changed page is listed with Claude's summary of it. If a page changed and its new review hasn't come back yet, the digest says "review pending" rather than showing a summary of the old version.
+
+Python writes the lists, and Claude writes only a short opening paragraph. A digest is mostly names, links, dates and counts. Those have to be exact, so they come straight from the data. Claude's part is the judgment call: two to four sentences on what changed and what most needs attention. It works from the same lists that appear below its paragraph, so it can only mention pages that are actually there, and the page summaries it reads are passed as data, not instructions.
+
+The facts never depend on the AI. If the API call fails, the digest still goes out without its opening paragraph, and `--no-overview` skips Claude entirely. Messages about the run go to stderr, so the digest is the only thing printed to stdout. That's what lets the scheduled workflow write it straight into the GitHub run summary.
+
+Uptime events are worked out in Python from whatever is in the log, so the digest works the same in either logging mode. In `all` mode, a run of hourly failures collapses into one "went down" and one "came back up." Durations are calculated in code, because language models are unreliable at date arithmetic, and empty sections are sent to Claude as "(none)" so it can tell "nothing happened" from "no data."
+
+The digest runs on Tuesdays, so it includes Monday's reviews, that morning's flags and the latest link check.
+
+#### Emailing the digest
+
+If `DIGEST_WEBHOOK_URL` is set, the digest is also posted to that webhook as JSON, with a subject line, the Markdown, an HTML version, the dates it covers, and counts of new, changed, flagged and down pages. I tested it with a second Make scenario that emails it through Resend, and `make/digest.blueprint.json` has it as a sample. It uses a separate webhook from alerts, since every alert payload has one fixed shape and the digest doesn't fit it. Make's free plan allows two active scenarios, which alerts and the digest use exactly.
+
+The HTML is built in Python with raw HTML turned off. Page names and summaries come from other people's websites, and standard Markdown would pass a tag like `<script>` straight into the email. With raw HTML off, tags are escaped and `javascript:` links aren't turned into links.
+
+The digest is printed before it's sent, so a failed email never loses it. A failed send still fails the run so GitHub reports it, and the error message never includes the webhook URL. Alerts and the digest share the same small function for posting to webhooks, so that rule only lives in one place.
+
 ### Fetching pages
 
 Requests identify the tool with a User-Agent and give up after 10 seconds. Audits and sitemap imports wait a second between requests, and link checks wait a second between requests to the same site, so none of them hammer anyone's site.
@@ -198,6 +212,7 @@ You'll need [uv](https://docs.astral.sh/uv/), which takes care of installing the
 
    # Optional
    ALERT_WEBHOOK_URL=https://...
+   DIGEST_WEBHOOK_URL=https://...
    CHECK_LOG=changes
    RETENTION_DAYS=90
    STALE_AFTER_DAYS=365
@@ -208,6 +223,8 @@ Only the commands that talk to Claude need the Claude key. `content-import`, `co
 
 To set up alerts, point `ALERT_WEBHOOK_URL` at your webhook and run `uv run content-test-alert`. If your tool learns the payload's structure from a sample, as Make does, send it this first sample: it fills in every field.
 
+To email the digest, point `DIGEST_WEBHOOK_URL` at a second webhook and run `uv run content-digest --test --no-overview`. That sends a real digest built from your data, marked as a test, without calling Claude.
+
 ## Running it locally
 
 ```bash
@@ -215,13 +232,16 @@ uv run content-import https://example.org/sitemap.xml --dry-run    # preview new
 uv run content-import https://example.org/sitemap.xml --contains /blog/ --limit 20
 
 uv run content-monitor    # check every active page
-uv run content-summary    # get Claude's take on current status and the past week
 
 uv run content-audit        # check for changes and send new or changed pages for review
 uv run content-audit --all  # review every page, changed or not
 uv run content-collect    # save any reviews that are ready
 uv run content-links      # check the links on every active page
 uv run content-flags      # update the attention flags
+
+uv run content-digest              # write the weekly digest and email it
+uv run content-digest --no-send    # print it without emailing
+uv run content-digest --test       # email it, marked as a test
 
 uv run content-prune --dry-run    # count checks older than the retention period
 uv run content-prune --days 30    # delete checks older than 30 days
@@ -246,22 +266,23 @@ When you change how alerts are routed, test both kinds. An outage and a recovery
 
 ## Automation
 
-Six GitHub Actions workflows run the tool on a schedule. All times are UTC.
+Seven GitHub Actions workflows run the tool on a schedule. All times are UTC.
 
 | Workflow | When it runs | Command |
 |---|---|---|
 | `monitor.yml` | Every hour at :17 | `content-monitor` |
-| `audit.yml` | Mondays at 10:23 | `content-audit`, then `content-summary` |
+| `audit.yml` | Mondays at 10:23 | `content-audit` |
+| `digest.yml` | Tuesdays at 10:47 | `content-digest` |
 | `collect.yml` | Every 6 hours | `content-collect` |
 | `links.yml` | Thursdays at 09:37 | `content-links` |
 | `prune.yml` | Daily at 04:43 | `content-prune` |
 | `flags.yml` | Daily at 06:13 | `content-flags` |
 
-Each one can also be started by hand from the Actions tab. Importing isn't scheduled, since it's worth checking a dry run before adding pages. The weekly uptime summary appears on the audit run's page.
+Each one can also be started by hand from the Actions tab. Importing isn't scheduled, since it's worth checking a dry run before adding pages. The weekly digest appears on its run's page as well as in the email.
 
-The credentials live in a GitHub environment called `production`, which only the `main` branch can use, so they're only ever available to code that's already been merged. Inside each workflow, credentials are passed only to the step that needs them. The uptime, link-check, prune and flag workflows never get the Claude key, and only the uptime workflow gets the alert webhook. Each workflow has its own timeout and won't start a new run while the previous one is still going.
+The credentials live in a GitHub environment called `production`, which only the `main` branch can use, so they're only ever available to code that's already been merged. Inside each workflow, credentials are passed only to the step that needs them. The uptime, link-check, prune and flag workflows never get the Claude key, Only the uptime workflow gets the alert webhook, and only the digest workflow gets the digest webhook. Each workflow has its own timeout and won't start a new run while the previous one is still going.
 
-To turn on alerts for scheduled runs, add `ALERT_WEBHOOK_URL` as a secret in the `production` environment. To change the storage or staleness settings, add `CHECK_LOG`, `RETENTION_DAYS` or `STALE_AFTER_DAYS` as variables there. If they're not set, alerts are skipped and the defaults apply.
+To turn on alerts and digest emails for scheduled runs, add `ALERT_WEBHOOK_URL` and `DIGEST_WEBHOOK_URL` as secrets in the `production` environment. To change the storage or staleness settings, add `CHECK_LOG`, `RETENTION_DAYS` or `STALE_AFTER_DAYS` as variables there. If they're not set, alerts and emails are skipped and the defaults apply.
 
 A separate `ci.yml` workflow runs linting, formatting checks, type checking and tests on every push and pull request. It has no access to any credentials. Dependabot opens pull requests when the GitHub Actions or Python dependencies have updates, and CI checks each one before it's merged.
 
@@ -274,7 +295,7 @@ uv run pyright             # type check
 uv run pytest              # test
 ```
 
-The tests cover the pure functions: reading the storage settings, deciding when a check gets logged and when it triggers an alert, building alert payloads, turning a log into outage and recovery events, building Airtable formulas, turning results into Airtable fields, pulling content out of HTML and fingerprinting it, deciding which pages need review, building and reading batch custom IDs, reading sitemaps, deciding which pages to import, building review prompts and schemas, cutting long pages down, matching topics, validating Claude's reviews, finding the links in a page, classifying link checks, pacing requests to each site, reading the dates pages declare, and deciding which attention flags apply. None of them touch the network, Airtable or Claude, so they run in a second and don't cost anything. The link checker is tested with httpx's `MockTransport`, which answers each request with whatever the test specifies, so even the network code runs without a network. That's also why CI can run them without credentials.
+The tests cover the pure functions: reading the storage settings, deciding when a check gets logged and when it triggers an alert, building alert payloads, turning a log into outage and recovery events, building Airtable formulas, turning results into Airtable fields, pulling content out of HTML and fingerprinting it, deciding which pages need review, building and reading batch custom IDs, reading sitemaps, deciding which pages to import, building review prompts and schemas, cutting long pages down, matching topics, validating Claude's reviews, finding the links in a page, classifying link checks, pacing requests to each site, reading the dates pages declare, deciding which attention flags apply, building the digest, turning it into safe email HTML, and posting to webhooks without exposing their URLs. None of them touch the network, Airtable or Claude, so they run in a second and don't cost anything. The link checker and the webhook sender are tested with httpx's `MockTransport`, which answers each request with whatever the test specifies, so even the network code runs without a network. That's also why CI can run them without credentials.
 
 ## Airtable schema
 
@@ -352,13 +373,14 @@ Field names are case-sensitive and need to match exactly.
 src/content_monitor/
   __init__.py    content-monitor: uptime checks
   importer.py    content-import: decide which sitemap pages to add, and add them
-  summary.py     content-summary: Claude's health report
+  digest.py      content-digest: the weekly digest and its email
   audit.py       content-audit: detect changes and submit reviews
   collect.py     content-collect: save finished reviews
   prune.py       content-prune: delete old checks
   links.py       content-links: check the links in each page
   flags.py       content-flags: decide which pages need attention
   alerts.py      alert rules, payloads and delivery, plus content-test-alert
+  webhooks.py    posts JSON to a webhook without exposing its URL in errors
   config.py      reads credentials and settings from the environment or .env
   checker.py     the shared HTTP client and single-page check
   history.py     turns logged checks into outage and recovery events
@@ -370,8 +392,9 @@ src/content_monitor/
 tests/
 make/
   alerts.blueprint.json   sample Make scenario for routing alerts
+  digest.blueprint.json   sample Make scenario for emailing the digest
 .github/
-  workflows/     CI plus the six scheduled jobs
+  workflows/     CI plus the seven scheduled jobs
   dependabot.yml
 ```
 
@@ -381,7 +404,7 @@ make/
 - A failed alert isn't retried. The run fails so I find out, but by the next run the new status is already saved, so that change won't be sent again.
 - Once an alert is accepted, delivering it is up to the receiver. Most webhook endpoints, Make's included, reply as soon as they've queued a request, so problems further along show up in that tool's own logs, not here.
 - Imports match URLs exactly, so `https://example.org/page` and `https://example.org/page/` count as two different pages. Compressed (`.xml.gz`) sitemaps aren't supported, and an import stops after reading 50 sitemaps.
-- If a page went down more than a week ago and has since recovered, the summary doesn't list it as an event. Its current status still shows how long it's been back up.
+- If a page went down more than a week ago and has since recovered, the digest doesn't list it as an event. Its current status still shows how long it's been back up.
 - Every page is a record too, so very large imports can still reach the free plan's limit, whatever the logging mode.
 - Claude reads only the first 3,000 words of a page, so very long pages are reviewed on their opening.
 - Changing the topic list doesn't retag existing pages until they change or `content-audit --all` runs.
