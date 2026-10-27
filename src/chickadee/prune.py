@@ -6,6 +6,8 @@ from pyairtable import Api
 from chickadee.config import load_options, load_settings
 from chickadee.formulas import checked_before
 
+HELP = "Delete logged checks older than the retention period."
+
 
 def positive_int(value: str) -> int:
     number = int(value)
@@ -15,10 +17,7 @@ def positive_int(value: str) -> int:
     return number
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Delete uptime checks older than a set number of days."
-    )
+def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--days",
         type=positive_int,
@@ -29,8 +28,9 @@ def main() -> None:
         action="store_true",
         help="count old checks without deleting anything",
     )
-    args = parser.parse_args()
 
+
+def run(args: argparse.Namespace) -> None:
     settings = load_settings()
     checks = Api(settings.airtable_token).table(settings.airtable_base_id, "Checks")
     days = args.days if args.days is not None else load_options().retention_days

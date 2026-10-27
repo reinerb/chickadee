@@ -1,3 +1,4 @@
+import argparse
 import time
 from datetime import UTC, datetime
 from urllib.parse import urlparse
@@ -11,6 +12,8 @@ from chickadee.config import load_settings
 from chickadee.extractor import extract_links
 from chickadee.results import LinkResult, LinkStatus
 from chickadee.store import to_link_fields
+
+HELP = "Check the links in each page's main content."
 
 BROKEN_CODES = {404, 410}
 MAX_LINKS_PER_PAGE = 100
@@ -46,7 +49,11 @@ def wait_needed(last_request: float | None, now: float, interval: float) -> floa
     return max(0.0, interval - (now - last_request))
 
 
-def main() -> None:
+def add_arguments(parser: argparse.ArgumentParser) -> None:
+    pass
+
+
+def run(args: argparse.Namespace) -> None:
     settings = load_settings()
     pages = Api(settings.airtable_token).table(settings.airtable_base_id, "Pages")
     records = pages.all(formula="{Active}", fields=["URL"])

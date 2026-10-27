@@ -22,6 +22,8 @@ from chickadee.formulas import checked_after
 from chickadee.history import Event, describe_duration, find_events
 from chickadee.webhooks import post_json
 
+HELP = "Write the weekly digest and email it."
+
 MODEL = "claude-haiku-5-5"
 DIGEST_DAYS = 7
 MAX_ATTENTION = 10
@@ -287,8 +289,7 @@ def build_digest_payload(
     }
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Write the weekly content digest.")
+def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--no-overview",
         action="store_true",
@@ -298,8 +299,9 @@ def main() -> None:
     parser.add_argument(
         "--no-send", action="store_true", help="print the digest without emailing it"
     )
-    args = parser.parse_args()
 
+
+def run(args: argparse.Namespace) -> None:
     settings = load_settings()
     api = Api(settings.airtable_token)
     pages = api.table(settings.airtable_base_id, "Pages")

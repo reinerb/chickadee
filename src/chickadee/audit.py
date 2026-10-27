@@ -20,18 +20,18 @@ from chickadee.reviewer import (
 )
 from chickadee.store import classify_change, needs_review, to_content_fields
 
+HELP = "Read each page, record changes, and send new or changed pages for review."
 
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Audit page content and send new or changed pages for review."
-    )
+
+def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--all",
         action="store_true",
         help="review every page, even ones that haven't changed",
     )
-    args = parser.parse_args()
 
+
+def run(args: argparse.Namespace) -> None:
     settings = load_settings()
     api = Api(settings.airtable_token)
     pages = api.table(settings.airtable_base_id, "Pages")
