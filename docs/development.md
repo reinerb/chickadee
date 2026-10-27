@@ -83,8 +83,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--example", action="store_true", help="...")
 
 
-def run(args: argparse.Namespace) -> None:
-    ...
+def run(args: argparse.Namespace) -> None: ...
 ```
 
 To add one, write the module and add it to `COMMANDS` in `cli.py`. A `Protocol` in `cli.py` describes this shape, so Pyright checks every command module has all three. `tests/test_cli.py` checks that every command's `--help` works.
