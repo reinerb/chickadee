@@ -30,3 +30,19 @@ def test_zero_retention_is_rejected():
 def test_stale_setting_defaults_to_a_year():
     assert parse_options({}).stale_after_days == 365
     assert parse_options({"STALE_AFTER_DAYS": "730"}).stale_after_days == 730
+
+
+@pytest.mark.parametrize("value", [None, "", "   "])
+def test_ignore_selectors_unset(value):
+    env = {} if value is None else {"IGNORE_SELECTORS": value}
+    assert parse_options(env).ignore_selectors is None
+
+
+def test_ignore_selectors_are_trimmed():
+    env = {"IGNORE_SELECTORS": " .related-posts, time "}
+    assert parse_options(env).ignore_selectors == ".related-posts, time"
+
+
+def test_invalid_selector_stops_at_startup():
+    with pytest.raises(SystemExit, match="IGNORE_SELECTORS"):
+        parse_options({"IGNORE_SELECTORS": ".related-posts,"})

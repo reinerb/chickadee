@@ -41,6 +41,15 @@ LINK_PAGE = """
   </main>
 </body></html>
 """
+MONDAY = """
+<html><head><title>Report</title></head><body><main>
+  <h1>Report</h1>
+  <p>Findings.</p>
+  <p>Updated <time>Monday</time></p>
+  <div class="related-posts"><a href="/post-a/">Post A</a></div>
+</main></body></html>
+"""
+TUESDAY = MONDAY.replace("Monday", "Tuesday").replace("Post A", "Post B")
 
 
 def page(title: str, body: str, nav: str = "Home") -> str:
@@ -54,6 +63,10 @@ def head(tags: str) -> BeautifulSoup:
     return BeautifulSoup(
         f"<html><head>{tags}</head><body></body></html>", "html.parser"
     )
+
+
+def fingerprint(html: str, ignore: str | None = None) -> str:
+    return content_hash(extract_content(html, ignore=ignore))
 
 
 def test_extracts_metadata_and_headings():
@@ -120,3 +133,15 @@ def test_missing_or_unreadable_dates_are_ignored():
     assert page_modified_at(head("")) is None
     assert parse_page_date("not a date") is None
     assert parse_page_date("2024-03-05") == datetime(2024, 3, 5, tzinfo=UTC)
+
+
+def test_ignored_sections_dont_count_as_changes():
+    assert fingerprint(MONDAY) != fingerprint(TUESDAY)
+    ignore = ".related-posts, time"
+    assert fingerprint(MONDAY, ignore) == fingerprint(TUESDAY, ignore)
+
+
+def test_ignored_sections_links_arent_checked():
+    page = "https://example.org/report/"
+    assert extract_links(MONDAY, page) == ["https://example.org/post-a/"]
+    assert extract_links(MONDAY, page, ignore=".related-posts") == []

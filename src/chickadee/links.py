@@ -8,7 +8,7 @@ from pyairtable import Api
 from pyairtable.api.types import UpdateRecordDict
 
 from chickadee.checker import make_client
-from chickadee.config import load_settings
+from chickadee.config import load_options, load_settings
 from chickadee.extractor import extract_links
 from chickadee.results import LinkResult, LinkStatus
 from chickadee.store import to_link_fields
@@ -64,6 +64,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
 
 def run(args: argparse.Namespace) -> None:
     settings = load_settings()
+    options = load_options()
     pages = Api(settings.airtable_token).table(settings.airtable_base_id, "Pages")
     records = pages.all(formula="{Active}", fields=["URL"])
 
@@ -87,7 +88,9 @@ def run(args: argparse.Namespace) -> None:
             ):
                 print(f"SKIP {url}: status {response.status_code}")
 
-            links = extract_links(response.text, str(response.url))
+            links = extract_links(
+                response.text, str(response.url), ignore=options.ignore_selectors
+            )
             page_links[record["id"]] = links[:MAX_LINKS_PER_PAGE]
 
         unique = list(
