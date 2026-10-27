@@ -3,8 +3,8 @@ from typing import Any
 
 import httpx
 
-from content_monitor.digest import build_digest_payload, digest_html
-from content_monitor.webhooks import post_json
+from chickadee.digest import build_digest_payload, digest_html
+from chickadee.webhooks import post_json
 
 NOW = datetime(2026, 10, 27, 10, 0, tzinfo=UTC)
 SINCE = NOW - timedelta(days=7)

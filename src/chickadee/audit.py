@@ -9,29 +9,29 @@ from anthropic.types.messages.batch_create_params import Request
 from pyairtable import Api
 from pyairtable.api.types import UpdateRecordDict
 
-from content_monitor.checker import make_client
-from content_monitor.config import load_anthropic_key, load_settings
-from content_monitor.extractor import content_hash, extract_content
-from content_monitor.reviewer import (
+from chickadee.checker import make_client
+from chickadee.config import load_anthropic_key, load_settings
+from chickadee.extractor import content_hash, extract_content
+from chickadee.reviewer import (
     Topic,
     build_review_request,
     build_system_prompt,
     review_schema,
 )
-from content_monitor.store import classify_change, needs_review, to_content_fields
+from chickadee.store import classify_change, needs_review, to_content_fields
+
+HELP = "Read each page, record changes, and send new or changed pages for review."
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Audit page content and send new or changed pages for review."
-    )
+def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--all",
         action="store_true",
         help="review every page, even ones that haven't changed",
     )
-    args = parser.parse_args()
 
+
+def run(args: argparse.Namespace) -> None:
     settings = load_settings()
     api = Api(settings.airtable_token)
     pages = api.table(settings.airtable_base_id, "Pages")

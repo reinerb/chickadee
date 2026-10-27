@@ -2,11 +2,11 @@ from collections.abc import Mapping, Sequence
 from datetime import datetime
 from typing import Any, Literal
 
-from content_monitor.checker import CheckResult
-from content_monitor.config import CheckLog
-from content_monitor.extractor import PageContent
-from content_monitor.results import LinkResult
-from content_monitor.reviewer import PageReview
+from chickadee.checker import CheckResult
+from chickadee.config import CheckLog
+from chickadee.extractor import PageContent
+from chickadee.results import LinkResult
+from chickadee.reviewer import PageReview
 
 ContentChange = Literal["new", "changed", "unchanged"]
 

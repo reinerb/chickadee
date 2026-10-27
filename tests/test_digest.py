@@ -3,7 +3,7 @@ from typing import Any
 
 from pyairtable.api.types import RecordDict
 
-from content_monitor.digest import (
+from chickadee.digest import (
     changed_pages,
     claude_input,
     needs_attention,
@@ -12,7 +12,7 @@ from content_monitor.digest import (
     render_digest,
     uptime_lines,
 )
-from content_monitor.history import Event
+from chickadee.history import Event
 
 NOW = datetime(2026, 10, 27, 10, 0, tzinfo=UTC)
 SINCE = NOW - timedelta(days=7)

@@ -25,7 +25,7 @@ jobs:
         run: uv sync --locked --no-dev
 
       - name: Delete old checks
-        run: uv run content-prune
+        run: uv run chickadee prune
         env:
           AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
           AIRTABLE_BASE_ID: ${{ vars.AIRTABLE_BASE_ID }}

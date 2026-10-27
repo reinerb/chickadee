@@ -2,7 +2,7 @@ import argparse
 
 import pytest
 
-from content_monitor.prune import positive_int
+from chickadee.prune import positive_int
 
 
 def test_zero_days_is_rejected():

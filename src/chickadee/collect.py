@@ -1,15 +1,22 @@
+import argparse
 from datetime import UTC, datetime
 
 from anthropic import Anthropic
 from pyairtable import Api
 from pyairtable.api.types import UpdateRecordDict
 
-from content_monitor.config import load_anthropic_key, load_settings
-from content_monitor.reviewer import parse_custom_id, parse_review
-from content_monitor.store import match_topics, to_review_fields
+from chickadee.config import load_anthropic_key, load_settings
+from chickadee.reviewer import parse_custom_id, parse_review
+from chickadee.store import match_topics, to_review_fields
+
+HELP = "Save finished reviews from Claude."
 
 
-def main() -> None:
+def add_arguments(parser: argparse.ArgumentParser) -> None:
+    pass
+
+
+def run(args: argparse.Namespace) -> None:
     settings = load_settings()
     api = Api(settings.airtable_token)
     pages = api.table(settings.airtable_base_id, "Pages")

@@ -5,11 +5,13 @@ from typing import Any
 
 import httpx
 
-from content_monitor.checker import CheckResult, make_client
-from content_monitor.config import load_alert_webhook
-from content_monitor.history import describe_duration
-from content_monitor.store import status_of
-from content_monitor.webhooks import post_json
+from chickadee.checker import CheckResult, make_client
+from chickadee.config import load_alert_webhook
+from chickadee.history import describe_duration
+from chickadee.store import status_of
+from chickadee.webhooks import post_json
+
+HELP = "Send a sample alert to the alert webhook."
 
 
 def should_alert(previous_status: str | None, status: str) -> bool:
@@ -94,17 +96,15 @@ def build_test_alert(*, recovered: bool, now: datetime) -> dict[str, Any]:
     )
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Send a sample alert to the alert webhook."
-    )
+def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--recovered",
         action="store_true",
         help="send a 'back up' alert instead of a 'down' alert",
     )
-    args = parser.parse_args()
 
+
+def run(args: argparse.Namespace) -> None:
     webhook_url = load_alert_webhook()
     if not webhook_url:
         raise SystemExit("Set ALERT_WEBHOOK_URL in .env first.")

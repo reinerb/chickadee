@@ -1,7 +1,7 @@
 import httpx
 import pytest
 
-from content_monitor.links import check_link, classify, wait_needed
+from chickadee.links import check_link, classify, wait_needed
 
 
 def client_for(handler) -> httpx.Client:

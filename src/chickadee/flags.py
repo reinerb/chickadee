@@ -1,3 +1,4 @@
+import argparse
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -7,7 +8,9 @@ from typing import Any
 from pyairtable import Api
 from pyairtable.api.types import RecordDict, UpdateRecordDict
 
-from content_monitor.config import load_options, load_settings
+from chickadee.config import load_options, load_settings
+
+HELP = "Flag pages that need attention."
 
 LOW_SCORE = 4
 
@@ -114,7 +117,11 @@ def flag_update(
     return {"Attention": list(flags), "Attention count": len(flags)}
 
 
-def main() -> None:
+def add_arguments(parser: argparse.ArgumentParser) -> None:
+    pass
+
+
+def run(args: argparse.Namespace) -> None:
     settings = load_settings()
     options = load_options()
     pages = Api(settings.airtable_token).table(settings.airtable_base_id, "Pages")
