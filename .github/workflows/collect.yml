@@ -25,7 +25,7 @@ jobs:
         run: uv sync --locked --no-dev
 
       - name: Save finished reviews
-        run: uv run content-collect
+        run: uv run chickadee collect
         env:
           AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
           AIRTABLE_BASE_ID: ${{ vars.AIRTABLE_BASE_ID }}

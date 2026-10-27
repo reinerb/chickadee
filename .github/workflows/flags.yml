@@ -25,7 +25,7 @@ jobs:
         run: uv sync --locked --no-dev
 
       - name: Update flags
-        run: uv run content-flags
+        run: uv run chickadee flags
         env:
           AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
           AIRTABLE_BASE_ID: ${{ vars.AIRTABLE_BASE_ID }}

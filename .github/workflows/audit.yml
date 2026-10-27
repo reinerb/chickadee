@@ -25,7 +25,7 @@ jobs:
         run: uv sync --locked --no-dev
 
       - name: Submit review batch
-        run: uv run content-audit
+        run: uv run chickadee audit
         env:
           AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
           AIRTABLE_BASE_ID: ${{ vars.AIRTABLE_BASE_ID }}
