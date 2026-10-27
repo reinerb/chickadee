@@ -19,14 +19,16 @@ The tests cover the logic that decides things, and none of them touch the networ
 
 That's possible because the code is split the same way throughout: small functions make the decisions, and a thin `run` function in each command fetches data, calls them, and saves the results. The decisions are what get tested:
 
-- **Uptime and alerts:** reading settings, deciding what gets logged and when to alert, building alert payloads, turning a log into outage and recovery events.
+- **Uptime and alerts:** reading settings, retrying failed checks, deciding what gets logged and when to alert, working out when an outage started, building alert payloads and tracking which were delivered, turning a log into outage and recovery events.
 - **Content:** pulling text, links and dates out of HTML, fingerprinting it, deciding what needs a review.
 - **Reviews:** building prompts and schemas, cutting long pages down, reading and writing batch custom IDs, validating Claude's answers, matching topics.
 - **Links:** finding links in a page, classifying results, pacing requests to each site.
 - **Flags and the digest:** deciding which flags apply, building the digest, turning it into safe email HTML.
 - **Plumbing:** reading sitemaps, deciding what to import, building Airtable formulas and fields, wiring up the command line.
 
-Network code is tested with httpx's `MockTransport`, which answers each request with whatever a test specifies: a 404, a redirect, a timeout. The link checker and the webhook sender are tested that way, so even the network code runs without a network.
+Network code is tested with httpx's `MockTransport`, which answers each request with whatever a test specifies: a 404, a redirect, a timeout. The uptime retry, the link checker and the webhook senders are tested that way, so even the network code runs without a network.
+
+Code that waits takes the waiting function as a parameter. The uptime retry normally calls `time.sleep`, but its test passes a function that just records how long it was asked to wait, so the test can confirm there was exactly one 30-second pause without spending 30 seconds.
 
 A few habits the tests follow:
 
@@ -47,10 +49,10 @@ src/chickadee/
   flags.py       chickadee flags: decide which pages need attention
   digest.py      chickadee digest: the weekly digest and its email
   prune.py       chickadee prune: delete old checks
-  alerts.py      alert rules and payloads, plus chickadee test-alert
+  alerts.py      alert rules, payloads and delivery, plus chickadee test-alert
   webhooks.py    posts JSON to a webhook without exposing its URL in errors
   config.py      reads credentials and settings from the environment or .env
-  checker.py     the shared HTTP client and single-page check
+  checker.py     the shared HTTP client, single-page check, and the retry for failed checks
   extractor.py   pulls the title, description, dates, headings, text and links from HTML, and fingerprints it
   reviewer.py    the review schema, prompt, topics, batch requests and validation
   store.py       turns results into Airtable fields, and decides what gets logged and what needs review

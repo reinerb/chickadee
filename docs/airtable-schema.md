@@ -16,6 +16,7 @@ One row per page. Each command writes its own group of fields, so the table read
 | Last checked | Date with time | `uptime` |
 | Last status code | Number | `uptime` |
 | Last response time (ms) | Number | `uptime` |
+| Alerted status | Single select: `Up`, `Down` | `uptime` |
 | Current title | Single line text | `audit` |
 | Current description | Long text | `audit` |
 | Word count | Number | `audit` |
@@ -42,12 +43,17 @@ One row per page. Each command writes its own group of fields, so the table read
 
 A few notes:
 
-- **Status and Key point up front are single selects, not checkboxes.** Airtable leaves unchecked checkboxes out of API responses, so an empty checkbox could mean "no" or "never checked." With a single select, empty only ever means "not checked yet."
+- **Status, Alerted status and Key point up front are single selects, not checkboxes.** Airtable leaves unchecked checkboxes out of API responses, so an empty checkbox could mean "no" or "never checked." With a single select, empty only ever means "not checked yet."
 - **Select options must already exist.** The API rejects values that aren't one of a field's options, so create them exactly as listed.
 - **Last checked is a plain date, not a rollup of Checks.** When only status changes are logged, the newest row in Checks usually isn't the newest check.
 - **Name is optional.** Anywhere a page is shown, its URL stands in when it has no name.
 
-Two hashes track whether a page needs a review: Content hash is the page as it is now, and Reviewed hash is the page as Claude last saw it. [Design](design.md#tracking-changes) explains how they work together.
+Two pairs of fields compare what's true now with what was last acted on:
+
+- **Content hash and Reviewed hash:** the page as it is now, and as Claude last saw it. A page needs a review when they differ. See [Tracking changes](design.md#tracking-changes).
+- **Status and Alerted status:** what the page is doing now, and what was last announced. An alert is due when they differ. See [Uptime](design.md#uptime).
+
+Leave Reviewed hash and Alerted status empty when adding pages. Chickadee fills them in.
 
 ### Views
 
