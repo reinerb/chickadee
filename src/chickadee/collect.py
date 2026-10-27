@@ -1,4 +1,5 @@
 import argparse
+from collections.abc import Container, Sequence
 from datetime import UTC, datetime
 
 from anthropic import Anthropic
@@ -10,6 +11,15 @@ from chickadee.reviewer import parse_custom_id, parse_review
 from chickadee.store import match_topics, to_review_fields
 
 HELP = "Save finished reviews from Claude."
+
+
+def drop_missing(
+    updates: Sequence[UpdateRecordDict], existing: Container[str]
+) -> tuple[list[UpdateRecordDict], list[str]]:
+    kept = [update for update in updates if update["id"] in existing]
+    missing = [update["id"] for update in updates if update["id"] not in existing]
+
+    return kept, missing
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
@@ -36,6 +46,8 @@ def run(args: argparse.Namespace) -> None:
     if not pending:
         print("No batches waiting to be collected.")
         return
+
+    existing = {record["id"] for record in pages.all(fields=["URL"])}
 
     for batch_record in pending:
         batch_id = batch_record["fields"]["Batch ID"]
@@ -73,6 +85,10 @@ def run(args: argparse.Namespace) -> None:
                 }
             )
 
-        pages.batch_update(updates)
+        updates, missing = drop_missing(updates, existing)
+        if missing:
+            print(f"  skipped {len(missing)} review(s) for pages no longer in Airtable")
+        if updates:
+            pages.batch_update(updates)
         batches.update(batch_record["id"], {"Collected": True})
         print(f"{batch_id}: saved {len(updates)} review(s)")
