@@ -9,6 +9,7 @@ from content_monitor.checker import CheckResult, make_client
 from content_monitor.config import load_alert_webhook
 from content_monitor.history import describe_duration
 from content_monitor.store import status_of
+from content_monitor.webhooks import post_json
 
 
 def should_alert(previous_status: str | None, status: str) -> bool:
@@ -57,17 +58,10 @@ def send_alerts(
     failures = 0
 
     for alert in alerts:
-        try:
-            response = client.post(webhook_url, json=alert)
-            response.raise_for_status()
-        except httpx.HTTPStatusError as exc:
+        error = post_json(client, webhook_url, alert)
+        if error:
             failures += 1
-            print(
-                f"  alert failed for {alert['page']}: HTTP {exc.response.status_code}"
-            )
-        except httpx.RequestError as exc:
-            failures += 1
-            print(f"  alert failed for {alert['page']}: {type(exc).__name__}")
+            print(f"  alert failed for {alert['page']}: {error}")
 
     return failures
 
