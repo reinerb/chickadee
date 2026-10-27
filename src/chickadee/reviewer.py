@@ -7,7 +7,7 @@ from anthropic.types import Message
 from anthropic.types.messages.batch_create_params import Request
 from pydantic import BaseModel, Field, ValidationError
 
-from content_monitor.extractor import PageContent
+from chickadee.extractor import PageContent
 
 MODEL = "claude-sonnet-5-5"
 MAX_WORDS = 3000

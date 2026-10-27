@@ -1,6 +1,6 @@
 import pytest
 
-from content_monitor.config import parse_options
+from chickadee.config import parse_options
 
 
 def test_defaults_when_unset():

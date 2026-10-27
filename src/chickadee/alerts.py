@@ -5,11 +5,11 @@ from typing import Any
 
 import httpx
 
-from content_monitor.checker import CheckResult, make_client
-from content_monitor.config import load_alert_webhook
-from content_monitor.history import describe_duration
-from content_monitor.store import status_of
-from content_monitor.webhooks import post_json
+from chickadee.checker import CheckResult, make_client
+from chickadee.config import load_alert_webhook
+from chickadee.history import describe_duration
+from chickadee.store import status_of
+from chickadee.webhooks import post_json
 
 
 def should_alert(previous_status: str | None, status: str) -> bool:

@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 
-from content_monitor.alerts import build_alert, build_test_alert, should_alert
-from content_monitor.checker import CheckResult
+from chickadee.alerts import build_alert, build_test_alert, should_alert
+from chickadee.checker import CheckResult
 
 NOW = datetime(2026, 10, 24, 15, 0, tzinfo=UTC)
 

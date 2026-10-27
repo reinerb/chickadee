@@ -3,8 +3,8 @@ from datetime import UTC, datetime, timedelta
 
 from pyairtable import Api
 
-from content_monitor.config import load_options, load_settings
-from content_monitor.formulas import checked_before
+from chickadee.config import load_options, load_settings
+from chickadee.formulas import checked_before
 
 
 def positive_int(value: str) -> int:

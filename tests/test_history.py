@@ -3,7 +3,7 @@ from typing import Any
 
 from pyairtable.api.types import RecordDict
 
-from content_monitor.history import describe_duration, find_events
+from chickadee.history import describe_duration, find_events
 
 
 def make_check(page_id: str, at: str, ok: bool) -> RecordDict:

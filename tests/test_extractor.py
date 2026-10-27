@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 
 from bs4 import BeautifulSoup
 
-from content_monitor.extractor import (
+from chickadee.extractor import (
     HASH_LENGTH,
     content_hash,
     extract_content,

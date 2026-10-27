@@ -5,10 +5,10 @@ from typing import Any
 from pyairtable import Api
 from pyairtable.api.types import UpdateRecordDict
 
-from content_monitor.alerts import build_alert, send_alerts, should_alert, status_of
-from content_monitor.checker import check_url, make_client
-from content_monitor.config import load_alert_webhook, load_options, load_settings
-from content_monitor.store import should_log, to_check_fields, to_status_fields
+from chickadee.alerts import build_alert, send_alerts, should_alert, status_of
+from chickadee.checker import check_url, make_client
+from chickadee.config import load_alert_webhook, load_options, load_settings
+from chickadee.store import should_log, to_check_fields, to_status_fields
 
 
 def main() -> None:

@@ -1,7 +1,7 @@
 [project]
-name = "content-monitor"
-version = "0.1.0"
-description = "Add your description here"
+name = "chickadee"
+version = "0.2.0"
+description = "Keeps track of what's on a website, what changed, and what needs attention."
 readme = "README.md"
 authors = [{ name = "ben", email = "ben@tidemarkstudio.dev" }]
 requires-python = ">=3.14"

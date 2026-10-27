@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
-from content_monitor.formulas import checked_after, checked_before
+from chickadee.formulas import checked_after, checked_before
 
 
 def test_formula_uses_utc_timestamp():

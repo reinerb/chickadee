@@ -3,7 +3,7 @@ from typing import Any
 
 from pyairtable.api.types import RecordDict
 
-from content_monitor.flags import (
+from chickadee.flags import (
     BROKEN_LINKS,
     DOWN,
     KEY_POINT_BURIED,

@@ -7,7 +7,7 @@ from typing import Any
 from pyairtable import Api
 from pyairtable.api.types import RecordDict, UpdateRecordDict
 
-from content_monitor.config import load_options, load_settings
+from chickadee.config import load_options, load_settings
 
 LOW_SCORE = 4
 

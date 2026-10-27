@@ -1,4 +1,4 @@
-from content_monitor.importer import plan_import
+from chickadee.importer import plan_import
 
 SITEMAP = [
     "https://example.org/research/a/",

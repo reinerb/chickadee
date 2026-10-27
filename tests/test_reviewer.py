@@ -1,8 +1,8 @@
 import json
 import re
 
-from content_monitor.extractor import PageContent
-from content_monitor.reviewer import (
+from chickadee.extractor import PageContent
+from chickadee.reviewer import (
     Topic,
     build_system_prompt,
     format_page_for_review,

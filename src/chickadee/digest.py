@@ -11,16 +11,16 @@ from markdown_it import MarkdownIt
 from pyairtable import Api
 from pyairtable.api.types import RecordDict
 
-from content_monitor.checker import make_client
-from content_monitor.config import (
+from chickadee.checker import make_client
+from chickadee.config import (
     load_anthropic_key,
     load_digest_webhook,
     load_settings,
 )
-from content_monitor.flags import ALL_FLAGS
-from content_monitor.formulas import checked_after
-from content_monitor.history import Event, describe_duration, find_events
-from content_monitor.webhooks import post_json
+from chickadee.flags import ALL_FLAGS
+from chickadee.formulas import checked_after
+from chickadee.history import Event, describe_duration, find_events
+from chickadee.webhooks import post_json
 
 MODEL = "claude-haiku-5-5"
 DIGEST_DAYS = 7

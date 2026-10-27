@@ -5,9 +5,9 @@ from urllib.parse import urlparse
 
 from pyairtable import Api
 
-from content_monitor.checker import make_client
-from content_monitor.config import load_settings
-from content_monitor.sitemap import collect_page_urls
+from chickadee.checker import make_client
+from chickadee.config import load_settings
+from chickadee.sitemap import collect_page_urls
 
 
 @dataclass(frozen=True)

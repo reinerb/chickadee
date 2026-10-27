@@ -41,5 +41,5 @@ def make_client() -> httpx.Client:
     return httpx.Client(
         follow_redirects=True,
         timeout=10.0,
-        headers={"User-Agent": "content-monitor (learning project)"},
+        headers={"User-Agent": "Chickadee (+https://github.com/reinerb/chickadee)"},
     )
