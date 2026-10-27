@@ -7,6 +7,7 @@ from pyairtable import Api
 
 from chickadee.checker import make_client
 from chickadee.config import load_settings
+from chickadee.prune import positive_int
 from chickadee.sitemap import collect_page_urls
 
 HELP = "Add pages from a sitemap to the Pages table."
@@ -51,7 +52,9 @@ def plan_import(
 def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("sitemap_url", help="URL of a sitemap or sitemap index")
     parser.add_argument("--contains", help="only add URLs containing this text")
-    parser.add_argument("--limit", help="add at most this many new pages")
+    parser.add_argument(
+        "--limit", type=positive_int, help="add at most this many new pages"
+    )
     parser.add_argument(
         "--dry-run",
         action="store_true",
