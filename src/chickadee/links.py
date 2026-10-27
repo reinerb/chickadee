@@ -30,14 +30,23 @@ def classify(status_code: int) -> LinkStatus:
     return "unverified"
 
 
+def redirected_home(requested: httpx.URL, final: httpx.URL) -> bool:
+    return requested.path not in ("", "/") and final.path in ("", "/")
+
+
 def check_link(client: httpx.Client, url: str) -> LinkResult:
     try:
         with client.stream("GET", url) as response:
             code = response.status_code
+            final = response.url
     except (httpx.ConnectError, httpx.InvalidURL, httpx.UnsupportedProtocol) as exc:
         return LinkResult(url, "broken", type(exc).__name__)
     except httpx.HTTPError as exc:
         return LinkResult(url, "unverified", type(exc).__name__)
+
+    status = classify(code)
+    if status == "ok" and redirected_home(httpx.URL(url), final):
+        return LinkResult(url, "unverified", "redirects to homepage")
 
     return LinkResult(url, classify(code), str(code))
 
