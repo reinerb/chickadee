@@ -9,7 +9,7 @@ A few ideas come up again and again:
 - **Airtable is the hub.** Each command does one job and writes its results to the page's row. Anything that needs the full picture, like the flags and the digest, reads it back from there.
 - **Code handles facts, Claude handles judgment.** Counts, dates, durations, lists and links come from Python, where they're exact. Claude writes summaries, reviews and the digest's opening, the parts that need judgment.
 - **Only report what the evidence supports.** A link is only "broken" when it's definitely broken, and a page is only flagged when the data backs it up. A tool that cries wolf stops being trusted.
-- **Failures either fix themselves or get noticed.** Missed reviews are retried on the next run without any bookkeeping. Failed deliveries fail the run so GitHub reports them.
+- **Failures either fix themselves or get noticed.** Missed reviews and undelivered alerts are retried on the next run without any bookkeeping. Failed deliveries also fail the run so GitHub reports them.
 - **Other people's content is untrusted.** Sitemaps, page text and page titles come from sites Chickadee doesn't control, so they're handled as data, never as instructions or live HTML.
 - **Be polite to websites.** Requests identify the tool, give up after a while, and never pile onto one site.
 
@@ -27,7 +27,16 @@ Status fields are single selects, not checkboxes. Airtable leaves unchecked chec
 
 Airtable can't save to two tables in one all-or-nothing operation, so the log is written before the page is updated. If the second write fails, the next run notices the same change again and logs it twice. Doing it the other way around would risk an outage never being logged at all, and a duplicate entry is the better failure.
 
-Alerts go out after both writes, so a failed save never produces an alert for a change that wasn't recorded. [Webhooks](webhooks.md) covers when alerts fire and what they contain.
+**Failed checks are retried before they count.** Most one-off failures are a dropped connection or a slow response that's gone seconds later. Any page that fails gets checked again after 30 seconds, and only a page that fails both times is recorded as down. The usual fix, alerting only after two failed runs in a row, would make every real outage at least an hour late with hourly checks. The retry has no such delay and needs nothing stored. All failing pages share a single pause, so if a whole site goes down, the run takes 30 seconds longer, not 30 seconds per page. A blip that clears on the retry is never recorded, so the status, log, flags and digest all agree it didn't happen.
+
+**Alerts use the same idea as review hashes.** Each page keeps two statuses:
+
+- **Status** is what the page is doing now, updated by every check.
+- **Alerted status** is the last status that was successfully announced, written only after an alert is delivered.
+
+An alert is due whenever the two differ. That means a failed alert is sent again on the next run, and if the page recovers before then, the two match again and the outdated alert is never sent. As with reviews, nothing has to remember that something went wrong.
+
+Alerts go out after both writes, so a failed save never produces an alert for a change that wasn't recorded. Alerted status is written last, after delivery. If a run crashes between sending and recording, the next run sends the alert again, and a duplicate is the better failure here too. [Webhooks](webhooks.md) covers when alerts fire and what they contain.
 
 ## Importing pages
 
@@ -128,12 +137,10 @@ The digest runs on Tuesdays, so it includes Monday's reviews, that morning's fla
 
 ## Fetching pages politely
 
-Requests identify the tool with a User-Agent that links back to this repo, so a site owner who sees Chickadee in their logs can find out what it is. Requests give up after 10 seconds. Audits and imports wait a second between pages, and link checks wait a second between requests to the same site.
+Requests identify the tool with a User-Agent that links back to this repo, so a site owner who sees Chickadee in their logs can find out what it is. Requests give up after 10 seconds, and a failed uptime check is retried only once. Audits and imports wait a second between pages, and link checks wait a second between requests to the same site.
 
 ## Limitations
 
-- One failed check is enough to send a "down" alert, so a brief blip produces a down alert and then a recovery an hour later. Waiting for two failures in a row would cut out the noise.
-- A failed alert isn't retried. The run fails so it gets noticed, but by the next run the new status is already saved, so that change won't be sent again.
 - Once a webhook accepts a message, delivering it is up to the receiver. Problems after that point show up in the receiving tool's logs, not here.
 - Imports match URLs exactly, so `https://example.org/page` and `https://example.org/page/` count as different pages. Compressed (`.xml.gz`) sitemaps aren't supported.
 - Claude reads only the first 3,000 words of a page, so very long pages are reviewed on their opening.

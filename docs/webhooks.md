@@ -31,7 +31,7 @@ Set `ALERT_WEBHOOK_URL`, and `chickadee uptime` posts an alert whenever a page's
 | `url` | The page's URL |
 | `status_code` | The HTTP status code, or `null` if the page didn't respond |
 | `error` | What went wrong when there was no response, such as a timeout |
-| `duration` | How long the previous status lasted. On recovery, that's how long the page was down. |
+| `duration` | How long the page has been down. On recovery, that's the whole outage. On a down alert, it's `null` unless the alert is a retry from an earlier run. It's also `null` when a recovery alert is retried, because the start of the outage is no longer known. |
 | `checked_at` | When the check ran, in UTC |
 | `message` | A ready-to-post summary, so a receiver can forward it without formatting anything |
 | `test` | `true` for alerts sent by `chickadee test-alert` |
@@ -41,9 +41,14 @@ Every payload has every field, even when a value is `null`. Tools like Make lear
 When alerts are sent:
 
 - **Only on a change.** A page that stays down doesn't alert every hour.
+- **Only once a failure is confirmed.** A page that fails its check is checked again 30 seconds later, and it only counts as down if it fails both times. A dropped connection or a slow response that clears up in seconds never becomes an alert.
 - **A page's first check only alerts if it's down.** "It's up, and we've never checked it before" isn't news.
 - **After results are saved.** If saving to Airtable fails, no alert goes out, and the next run spots the same change and alerts then.
+- **Failed alerts are retried on the next run.** Each page remembers the last status that was successfully announced, in its "Alerted status" field. An alert is due whenever that differs from the current status, so an alert that didn't go through is sent next time.
+- **Stale alerts are never sent.** If a "down" alert fails and the page recovers before the next run, the two statuses match again and nothing is sent. Nobody hears a page is down after it's already back.
 - **Failures are loud.** If an alert can't be delivered, `uptime` still saves everything, then exits with an error so a scheduled run shows as failed.
+
+A run that crashes after sending an alert but before recording it will send that alert again next time. That's the deliberate trade-off: an occasional duplicate is better than a missed outage.
 
 `chickadee test-alert` sends a sample "down" alert, and `--recovered` sends a sample "back up" one. Both are marked `"test": true`.
 

@@ -1,7 +1,8 @@
 import argparse
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 
@@ -13,12 +14,39 @@ from chickadee.webhooks import post_json
 
 HELP = "Send a sample alert to the alert webhook."
 
+AlertAction = Literal["send", "record", "none"]
 
-def should_alert(previous_status: str | None, status: str) -> bool:
-    if status == previous_status:
-        return False
 
-    return not (previous_status is None and status == "Up")
+@dataclass(frozen=True)
+class PendingAlert:
+    record_id: str
+    status: str
+    payload: dict[str, Any]
+
+
+def decide_alert(alerted: str | None, status: str) -> AlertAction:
+    if status == alerted:
+        return "none"
+
+    if alerted is None and status == "Up":
+        return "record"
+
+    return "send"
+
+
+def down_since(
+    previous_status: str | None,
+    status_since: datetime | None,
+    ok: bool,
+    checked_at: datetime,
+) -> datetime | None:
+    if previous_status == "Down":
+        return status_since
+
+    if not ok:
+        return checked_at
+
+    return None
 
 
 def build_alert(
@@ -26,16 +54,23 @@ def build_alert(
     name: str,
     url: str,
     result: CheckResult,
-    previous_since: datetime | None,
+    down_since: datetime | None,
     checked_at: datetime,
     test: bool = False,
 ) -> dict[str, Any]:
     status = status_of(result)
-    duration = describe_duration(previous_since, checked_at) if previous_since else None
+    duration = (
+        describe_duration(down_since, checked_at)
+        if down_since is not None and down_since < checked_at
+        else None
+    )
 
     if status == "Down":
         reason = result.status_code or result.error or "no response"
-        message = f"{name} is down ({reason}). {url}"
+        if duration:
+            message = f"{name} has been down for {duration} ({reason}). {url}"
+        else:
+            message = f"{name} is down ({reason}). {url}"
     elif duration:
         message = f"{name} is back up after {duration} down. {url}"
     else:
@@ -52,20 +87,6 @@ def build_alert(
         "message": message,
         "test": test,
     }
-
-
-def send_alerts(
-    client: httpx.Client, webhook_url: str, alerts: Sequence[dict[str, Any]]
-) -> int:
-    failures = 0
-
-    for alert in alerts:
-        error = post_json(client, webhook_url, alert)
-        if error:
-            failures += 1
-            print(f"  alert failed for {alert['page']}: {error}")
-
-    return failures
 
 
 def build_test_alert(*, recovered: bool, now: datetime) -> dict[str, Any]:
@@ -90,10 +111,25 @@ def build_test_alert(*, recovered: bool, now: datetime) -> dict[str, Any]:
         name="Example page",
         url="https://example.org/",
         result=result,
-        previous_since=now - timedelta(hours=2, minutes=15),
+        down_since=now - timedelta(hours=2, minutes=15),
         checked_at=now,
         test=True,
     )
+
+
+def deliver_alerts(
+    client: httpx.Client, webhook_url: str, pending: Sequence[PendingAlert]
+) -> list[PendingAlert]:
+    delivered = []
+
+    for alert in pending:
+        error = post_json(client, webhook_url, alert.payload)
+        if error:
+            print(f"  alert failed for {alert.payload['page']}: {error}")
+        else:
+            delivered.append(alert)
+
+    return delivered
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
@@ -111,8 +147,8 @@ def run(args: argparse.Namespace) -> None:
 
     sample = build_test_alert(recovered=args.recovered, now=datetime.now(UTC))
     with make_client() as client:
-        failures = send_alerts(client, webhook_url, [sample])
+        error = post_json(client, webhook_url, sample)
 
-    if failures:
-        raise SystemExit("Test alert failed.")
+    if error:
+        raise SystemExit(f"Test alert failed: {error}")
     print(f"Sent a test '{sample['event']}' alert.")
