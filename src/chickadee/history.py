@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -14,13 +14,32 @@ class Event:
     error: str | None
 
 
-def find_events(checks: Sequence[RecordDict]) -> list[Event]:
+def latest_status(
+    checks_newest_first: Iterable[RecordDict], page_ids: Collection[str]
+) -> dict[str, str]:
+    statuses: dict[str, str] = {}
+    if not page_ids:
+        return statuses
+    for check in checks_newest_first:
+        fields = check["fields"]
+        linked = fields.get("Page") or []
+        if not linked or linked[0] not in page_ids or linked[0] in statuses:
+            continue
+        statuses[linked[0]] = "Up" if fields.get("Ok") else "Down"
+        if len(statuses) == len(page_ids):
+            break
+    return statuses
+
+
+def find_events(
+    checks: Sequence[RecordDict], initial: Mapping[str, str] | None = None
+) -> list[Event]:
     usable = [
         c for c in checks if c["fields"].get("Checked at") and c["fields"].get("Page")
     ]
     usable.sort(key=lambda c: datetime.fromisoformat(c["fields"]["Checked at"]))
 
-    last_status: dict[str, str] = {}
+    last_status: dict[str, str] = dict(initial or {})
     events: list[Event] = []
 
     for check in usable:

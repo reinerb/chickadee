@@ -1,9 +1,12 @@
 import time
 import zlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime
 
 import httpx
 from defusedxml.ElementTree import fromstring
+
+from chickadee.extractor import parse_page_date
 
 NS = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
 MAX_SITEMAPS = 50
@@ -15,6 +18,7 @@ GZIP_MAGIC = b"\x1f\x8b"
 class SitemapEntries:
     pages: tuple[str, ...]
     sitemaps: tuple[str, ...]
+    lastmod: dict[str, datetime] = field(default_factory=dict)
 
 
 class SitemapError(Exception):
@@ -61,19 +65,32 @@ def fetch_sitemap(
 
 def parse_sitemap(xml: bytes | str) -> SitemapEntries:
     root = fromstring(xml)
-    pages = tuple(
-        loc.text.strip() for loc in root.findall("sm:url/sm:loc", NS) if loc.text
-    )
+    pages: list[str] = []
+    lastmod: dict[str, datetime] = {}
+
+    for entry in root.findall("sm:url", NS):
+        url = (entry.findtext("sm:loc", namespaces=NS) or "").strip()
+        if not url:
+            continue
+        pages.append(url)
+        modified = parse_page_date(
+            (entry.findtext("sm:lastmod", namespaces=NS) or "").strip()
+        )
+        if modified is not None:
+            lastmod[url] = modified
+
     sitemaps = tuple(
         loc.text.strip() for loc in root.findall("sm:sitemap/sm:loc", NS) if loc.text
     )
-    return SitemapEntries(pages, sitemaps)
+    return SitemapEntries(tuple(pages), sitemaps, lastmod)
 
 
-def collect_page_urls(client: httpx.Client, sitemap_url: str) -> list[str]:
+def collect_page_urls(
+    client: httpx.Client, sitemap_url: str
+) -> dict[str, datetime | None]:
     to_visit = [sitemap_url]
     visited: set[str] = set()
-    pages: list[str] = []
+    pages: dict[str, datetime | None] = {}
 
     while to_visit and len(visited) < MAX_SITEMAPS:
         url = to_visit.pop()
@@ -82,11 +99,12 @@ def collect_page_urls(client: httpx.Client, sitemap_url: str) -> list[str]:
         visited.add(url)
 
         entries = parse_sitemap(fetch_sitemap(client, url))
-        pages.extend(entries.pages)
+        for page in entries.pages:
+            pages.setdefault(page, entries.lastmod.get(page))
         to_visit.extend(entries.sitemaps)
         time.sleep(1)
 
     if to_visit:
         print(f"Stopped after {MAX_SITEMAPS} sitemaps. Some were not read.")
 
-    return list(dict.fromkeys(pages))
+    return pages

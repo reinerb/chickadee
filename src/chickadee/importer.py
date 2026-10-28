@@ -1,6 +1,8 @@
 import argparse
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import datetime
+from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 from pyairtable import Api
@@ -25,6 +27,13 @@ def url_key(url: str) -> str:
     return urlunsplit(
         ("", parts.netloc.lower(), parts.path.rstrip("/"), parts.query, "")
     )
+
+
+def new_page_fields(url: str, lastmod: datetime | None) -> dict[str, Any]:
+    fields: dict[str, Any] = {"URL": url, "Active": True}
+    if lastmod is not None:
+        fields["Sitemap lastmod"] = lastmod.isoformat()
+    return fields
 
 
 def plan_import(
@@ -82,11 +91,11 @@ def run(args: argparse.Namespace) -> None:
 
     with make_client() as client:
         try:
-            sitemap_urls = collect_page_urls(client, args.sitemap_url)
+            sitemap_pages = collect_page_urls(client, args.sitemap_url)
         except SitemapError as exc:
             raise SystemExit(f"Couldn't read the sitemap: {exc}") from None
 
-    print(f"Found {len(sitemap_urls)} URL(s) in the sitemap.")
+    print(f"Found {len(sitemap_pages)} URL(s) in the sitemap.")
 
     tracked = {
         url
@@ -94,7 +103,9 @@ def run(args: argparse.Namespace) -> None:
         if (url := record["fields"].get("URL"))
     }
 
-    plan = plan_import(sitemap_urls, tracked, contains=args.contains, limit=args.limit)
+    plan = plan_import(
+        list(sitemap_pages), tracked, contains=args.contains, limit=args.limit
+    )
 
     for url in plan.to_add:
         print(f"  + {url}")

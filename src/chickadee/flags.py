@@ -40,6 +40,7 @@ FIELDS = [
     "Key point up front",
     "Page modified at",
     "Content changed at",
+    "Sitemap lastmod",
     "Attention",
     "Attention count",
 ]
@@ -64,17 +65,25 @@ def _parse_time(value: Any) -> datetime | None:
     return None
 
 
-def facts_from_record(record: RecordDict) -> PageFacts:
+def last_updated(record: RecordDict) -> datetime:
     fields = record["fields"]
-    dates = [
-        date
-        for date in (
+    observed = [
+        moment
+        for moment in (
             _parse_time(fields.get("Page modified at")),
             _parse_time(fields.get("Content changed at")),
         )
-        if date is not None
+        if moment is not None
     ]
+    if observed:
+        return max(observed)
+    return _parse_time(fields.get("Sitemap lastmod")) or datetime.fromisoformat(
+        record["createdTime"]
+    )
 
+
+def facts_from_record(record: RecordDict) -> PageFacts:
+    fields = record["fields"]
     return PageFacts(
         audited=bool(fields.get("Content hash")),
         down=fields.get("Status") == "Down",
@@ -83,9 +92,7 @@ def facts_from_record(record: RecordDict) -> PageFacts:
         has_title=bool(fields.get("Current title")),
         has_description=bool(fields.get("Current description")),
         key_point_buried=fields.get("Key point up front") == "No",
-        last_updated=max(dates)
-        if dates
-        else datetime.fromisoformat(record["createdTime"]),
+        last_updated=last_updated(record),
     )
 
 
