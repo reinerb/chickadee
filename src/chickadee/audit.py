@@ -19,6 +19,7 @@ from chickadee.reviewer import (
     review_schema,
     review_version,
 )
+from chickadee.site_context import load_site_context
 from chickadee.store import classify_change, review_state, to_content_fields
 
 HELP = "Read each page, record changes, and send new or changed pages for review."
@@ -57,10 +58,14 @@ def run(args: argparse.Namespace) -> None:
     if not topics:
         raise SystemExit("Add at least one topic to the Topics table before auditing.")
 
-    system = build_system_prompt(topics)
+    context = load_site_context(api, settings.airtable_base_id)
+    system = build_system_prompt(topics, context=context)
     schema = review_schema([topic.name for topic in topics])
     version = review_version(system, schema)
-    print(f"Review version {version}")
+    print(
+        f"Review version {version} "
+        f"({'with' if context else 'without'} site context, {len(topics)} topic(s))"
+    )
 
     audited_at = datetime.now(UTC)
     updates: list[UpdateRecordDict] = []

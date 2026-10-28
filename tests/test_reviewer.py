@@ -124,7 +124,7 @@ def test_schema_limits_topics_to_the_list():
 
 def test_prompt_lists_topics_with_descriptions():
     prompt = build_system_prompt(
-        [Topic("Fish", "Research on fish welfare"), Topic("Diet")]
+        [Topic("Fish", "Research on fish welfare"), Topic("Diet")], context=None
     )
 
     assert "- Fish: Research on fish welfare" in prompt
