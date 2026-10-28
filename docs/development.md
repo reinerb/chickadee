@@ -20,13 +20,13 @@ The tests cover the logic that decides things, and none of them touch the networ
 That's possible because the code is split the same way throughout: small functions make the decisions, and a thin `run` function in each command fetches data, calls them, and saves the results. The decisions are what get tested:
 
 - **Uptime and alerts:** reading settings, retrying failed checks, deciding what gets logged and when to alert, working out when an outage started, building alert payloads and tracking which were delivered, turning a log into outage and recovery events.
-- **Content:** pulling text, links and dates out of HTML, fingerprinting it, deciding what needs a review.
-- **Reviews:** building prompts and schemas, cutting long pages down, reading and writing batch custom IDs, validating Claude's answers, matching topics.
-- **Links:** finding links in a page, classifying results, pacing requests to each site.
+- **Content:** pulling text, links and dates out of HTML, ignoring configured sections, fingerprinting it, deciding what needs a review.
+- **Reviews:** building prompts and schemas, cutting long pages down, reading and writing batch custom IDs, validating Claude's answers, matching topics, skipping pages that were deleted.
+- **Links:** finding links in a page, classifying results, spotting redirects to the homepage, pacing requests to each site.
 - **Flags and the digest:** deciding which flags apply, building the digest, turning it into safe email HTML.
-- **Plumbing:** reading sitemaps, deciding what to import, building Airtable formulas and fields, wiring up the command line.
+- **Plumbing:** reading sitemaps (including compressed and oversized ones), matching URLs that are written differently, deciding what to import, building Airtable formulas and fields, wiring up the command line.
 
-Network code is tested with httpx's `MockTransport`, which answers each request with whatever a test specifies: a 404, a redirect, a timeout. The uptime retry, the link checker and the webhook senders are tested that way, so even the network code runs without a network.
+Network code is tested with httpx's `MockTransport`, which answers each request with whatever a test specifies: a 404, a redirect, a timeout. The uptime retry, the link checker, the sitemap download and the webhook senders are tested that way, so even the network code runs without a network.
 
 Code that waits takes the waiting function as a parameter. The uptime retry normally calls `time.sleep`, but its test passes a function that just records how long it was asked to wait, so the test can confirm there was exactly one 30-second pause without spending 30 seconds.
 
@@ -58,7 +58,7 @@ src/chickadee/
   store.py       turns results into Airtable fields, and decides what gets logged and what needs review
   history.py     turns logged checks into outage and recovery events
   formulas.py    Airtable formulas for filtering checks by date
-  sitemap.py     reads sitemaps and sitemap indexes
+  sitemap.py     reads sitemaps and sitemap indexes, including compressed ones
   results.py     the link check result type, shared by links.py and store.py
 tests/
 make/
@@ -85,7 +85,8 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--example", action="store_true", help="...")
 
 
-def run(args: argparse.Namespace) -> None: ...
+def run(args: argparse.Namespace) -> None:
+    ...
 ```
 
 To add one, write the module and add it to `COMMANDS` in `cli.py`. A `Protocol` in `cli.py` describes this shape, so Pyright checks every command module has all three. `tests/test_cli.py` checks that every command's `--help` works.

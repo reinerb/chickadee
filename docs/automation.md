@@ -19,7 +19,7 @@ All times are UTC.
 Why these times:
 
 - **Odd minutes.** Most scheduled jobs on GitHub start on the hour, and runs are delayed or occasionally dropped when it's busy. Running at :17 or :23 avoids the rush.
-- **The audit runs Monday and the digest Tuesday**, so the digest includes Monday's reviews. `collect` runs every six hours, and since it's safe to run repeatedly, it doesn't need to be timed to the audit. It picks up each batch once it's ready. (And truthfully, in my experience, Mondays are usually busy enough.)
+- **The audit runs Monday and the digest Tuesday**, so the digest includes Monday's reviews. `collect` runs every six hours, and since it's safe to run repeatedly, it doesn't need to be timed to the audit. It picks up each batch once it's ready.
 - **Flags run every morning**, after the night's prune, so the "Needs attention" view is current each day.
 - **The link check runs midweek**, away from the audit, since both make a lot of requests to the same sites.
 
@@ -36,17 +36,17 @@ Inside each workflow, credentials are given only to the step that needs them, an
 | Workflow | Airtable | Claude key | Webhook | Settings |
 |---|---|---|---|---|
 | `monitor.yml` | ✓ | | Alerts | `CHECK_LOG` |
-| `audit.yml` | ✓ | ✓ | | |
+| `audit.yml` | ✓ | ✓ | | `IGNORE_SELECTORS` |
 | `collect.yml` | ✓ | ✓ | | |
 | `digest.yml` | ✓ | ✓ | Digest | |
-| `links.yml` | ✓ | | | |
+| `links.yml` | ✓ | | | `IGNORE_SELECTORS` |
 | `prune.yml` | ✓ | | | `RETENTION_DAYS` |
 | `flags.yml` | ✓ | | | `STALE_AFTER_DAYS` |
 
 To set it up, create the `production` environment under **Settings → Environments**, restrict it to the `main` branch, and add:
 
 - **Secrets:** `AIRTABLE_TOKEN`, `ANTHROPIC_API_KEY`, and optionally `ALERT_WEBHOOK_URL` and `DIGEST_WEBHOOK_URL`.
-- **Variables:** `AIRTABLE_BASE_ID`, and optionally `CHECK_LOG`, `RETENTION_DAYS` and `STALE_AFTER_DAYS`.
+- **Variables:** `AIRTABLE_BASE_ID`, and optionally `CHECK_LOG`, `RETENTION_DAYS`, `STALE_AFTER_DAYS` and `IGNORE_SELECTORS`.
 
 Secrets are encrypted and hidden in logs. Variables are plain configuration that isn't sensitive. Settings that aren't set fall back to their defaults, and alerts and emails are skipped without their webhooks.
 
