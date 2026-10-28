@@ -19,11 +19,12 @@ uv sync
 
 ## 2. Build the Airtable base
 
-Create a base with four tables: **Pages**, **Checks**, **Audit batches** and **Topics**. [Airtable schema](airtable-schema.md) lists every field. The names are case-sensitive and have to match exactly.
+Create a base with five tables: **Pages**, **Checks**, **Audit batches**, **Topics** and **Site**. [Airtable schema](airtable-schema.md) lists every field. The names are case-sensitive and have to match exactly.
 
 Then:
 
 - **Add a few topics** to the Topics table, each with a sentence describing what counts. The descriptions go into the review prompt, and specific ones ("Research on the welfare of farmed fish, including slaughter and stocking density") tag pages more accurately than vague ones ("Fish").
+- **Add one row to the Site table.** Leave Context empty to start. Once reviews are running, you can describe the site there to make them more specific (see [Configuration](configuration.md#site-context)).
 - **Create a "Needs attention" view** on Pages: filter to Active is checked and Attention count is greater than 0, sorted by Attention count, highest first. That view is your to-do list.
 
 ## 3. Get credentials

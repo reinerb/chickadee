@@ -48,6 +48,8 @@ It also lists tracked pages that have dropped out of the sitemap, since those ma
 
 **Sitemaps are untrusted input.** They're parsed with `defusedxml`, which blocks the malicious-XML tricks Python's standard parser is open to. Following indexes stops after 50 sitemaps, and a sitemap that points back to one already read is skipped, so a badly built sitemap can't send the importer in circles.
 
+**Each new page keeps its sitemap date.** If the sitemap gives a `lastmod` for a page, it's saved when the page is created, and the staleness check uses it as a fallback (see [Attention flags](#attention-flags)). A date that can't be read is skipped rather than stopping the import.
+
 **Compressed sitemaps are capped.** Gzipped sitemaps (`.xml.gz`) are recognized by the first two bytes of the file rather than the extension, since some servers decompress them on the way and the name no longer matches the contents. A few kilobytes of gzip can expand to gigabytes, so both the download and the decompression stop at 50 MB, the sitemap standard's own maximum. Decompression asks zlib for at most one byte more than the limit, so an oversized file is caught without ever being unpacked in full.
 
 ## Tracking changes
@@ -69,12 +71,12 @@ A page's first audit sets a baseline and doesn't count as a change.
 
 ### When the review itself changes
 
-A review depends on more than the page. It also depends on the setup: the model, the system prompt, the topic list and the word cutoff. Adding a topic leaves every existing review incomplete, even though no page has changed.
+A review depends on more than the page. It also depends on the setup: the model, the system prompt, the site context, the topic list and the word cutoff. Adding a topic leaves every existing review incomplete, even though no page has changed.
 
 So the setup gets a fingerprint too. The **review version** is a 12-character hash of everything that shapes a review except the page:
 
 - the model
-- the system prompt, which includes the topic descriptions
+- the system prompt, which includes the site context and the topic descriptions
 - the schema, which includes the topic names
 - the word cutoff
 - a revision number in the code
@@ -105,6 +107,8 @@ Claude reads each page's title, description, headings and main text, and returns
 Whether the main point comes first matters because AI search tools tend to quote a page's opening.
 
 **The shape is a Pydantic model.** Its schema is sent with every request using structured outputs, so the answer always comes back in the same shape and maps straight onto Airtable fields. The descriptive fields come before the score in the schema, and structured output keeps that order, so Claude writes down what a page says before judging it. The API can't enforce number ranges, so the score's 1 to 10 range is checked with Pydantic when results come in.
+
+**The site context tells Claude who the site is for.** What counts as a page's main point depends on who's reading it: a donor, a researcher, a customer. So the review prompt can include a short description of the site, its audience and its goals, written in Airtable by the people who run it ([Configuration](configuration.md#site-context) covers how). It's a paragraph rather than a set of separate fields, because sites differ in too many ways for a fixed set of fields to cover, and it describes the site rather than replacing the prompt. The prompt's own rules, like treating page text as untrusted and how scores work, stay in code, so they're the same for every site. The prompt opens with Claude's role, then the context, then the rules, so the fixed rules always come after anything the context says. The context is trusted, unlike page text, because it's written by the site's own team rather than taken from pages. It's capped at 2,000 characters, since it's sent with every review, and an empty Site table leaves the prompt exactly as it would be without the feature. The digest's opening paragraph uses the same context.
 
 **Topics come from Airtable,** so the list can change without touching code. Each audit loads it and adds it to the schema as an enum, so Claude can only choose topics that exist. Changing the list counts as a new review setup, so every page is retagged on the next audit. The API doesn't guarantee the capitalization of enum values, so names are matched case-insensitively when reviews are saved, and any name that doesn't match is reported instead of dropped silently.
 
@@ -151,7 +155,15 @@ Link checking is its own command rather than part of the audit. It makes a lot o
 
 **Flags only fire when the data supports them.** A page that hasn't been audited isn't missing metadata, and one that hasn't been reviewed doesn't have a low score.
 
-**Staleness uses the most recent of three dates:** the modified date the page declares in its own metadata, the last change Chickadee detected, and, if there's neither, when the page was added to Airtable. Change tracking only knows about changes since monitoring started, so without the page's own date, nothing could be flagged as stale for a year. Most CMSs, WordPress included, publish that date. The fallback is deliberately cautious: without evidence a page is old, it isn't flagged.
+**Staleness uses the best date available,** in this order:
+
+1. The more recent of the modified date the page declares in its own metadata and the last change Chickadee detected.
+2. If there's neither, the page's `lastmod` date from the sitemap it was imported from.
+3. If there's none of these, when the page was added to Airtable.
+
+Change tracking only knows about changes since monitoring started, so without the page's own date, nothing could be flagged as stale for a year. Most CMSs, WordPress included, publish that date, and the sitemap covers most of those that don't.
+
+The sitemap date is only a fallback, never compared against the others, because some CMSs set every page's `lastmod` to the current time. If it counted equally, a fake recent date would beat a page's real 2023 modified date and hide a page that really is stale. A `lastmod` that's too recent only ever means "not stale," so it can't cause a false flag. The fallback is deliberately cautious: without evidence a page is old, it isn't flagged.
 
 **The rules live in Python, not Airtable formula fields,** so they're tested, versioned, and shared with the digest. The command runs daily and only writes to pages whose flags have changed, so most runs touch almost nothing. The staleness period is a setting because it differs between sites. The score threshold isn't.
 
@@ -163,7 +175,7 @@ Link checking is its own command rather than part of the audit. It makes a lot o
 
 **The facts never depend on the AI.** If the API call fails, the digest still goes out without its opening paragraph, and `--no-overview` skips Claude entirely. Messages about the run go to stderr, so the digest is the only thing on stdout. That's what lets the scheduled workflow write it straight into the GitHub run summary.
 
-**Uptime events are worked out in Python** from whatever is in the log, so the digest works the same with either logging setting. When every check is logged, a run of hourly failures collapses into one "went down" and one "came back up." Durations are calculated in code, because language models are unreliable at date arithmetic, and empty sections are sent to Claude as "(none)" so it can tell "nothing happened" from "no data."
+**Uptime events are worked out in Python** from whatever is in the log, so the digest works the same with either logging setting. When every check is logged, a run of hourly failures collapses into one "went down" and one "came back up." Each page starts the week with its status from its last check before the week, so a page that went down last month and recovered on Wednesday shows as "came back up," and a page that was already down doesn't "go down" again at the week's first check. Checks before the week are read newest first and reading stops once every page is accounted for, so even a long log adds little time. A recovery from an outage that started before the week has no duration, because when every check is logged, the last check before the week isn't necessarily when the outage began. Durations are calculated in code, because language models are unreliable at date arithmetic, and empty sections are sent to Claude as "(none)" so it can tell "nothing happened" from "no data."
 
 The digest runs on Tuesdays, so it includes Monday's reviews, that morning's flags and the latest link check. [Webhooks](webhooks.md#weekly-digest) covers how it's emailed and how its HTML is kept safe.
 
@@ -177,6 +189,5 @@ Requests identify the tool with a User-Agent that links back to this repo, so a 
 - Imports treat `www.example.org` and `example.org` as different sites, since they can be. If your Airtable uses one and your sitemap the other, pages are imported twice.
 - Claude reads only the first 3,000 words of a page, so very long pages are reviewed on their opening.
 - A link to a "page not found" message that's sent with a success code, rather than a 404, looks fine. Each page's check stops after its first 100 links.
-- Pages that don't declare a modified date can't be flagged as stale until they've gone unchanged for the full staleness period after being added.
-- If a page went down more than a week ago and has since recovered, the digest doesn't list it as an event. Its current status still shows how long it's been back up.
+- Pages with no declared modified date and no sitemap `lastmod`, including pages added by hand, can't be flagged as stale until they've gone unchanged for the full staleness period after being added.
 - Every page is a record too, so very large imports can still reach the free plan's limit, whatever the logging setting.

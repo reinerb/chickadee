@@ -70,3 +70,20 @@ Things to know:
 - **The link checker skips those sections too.** Links in a widget that changes on every load aren't really part of the page.
 - **Changing it re-reviews some pages once.** Removing a section changes the fingerprint of every page that had it, so those pages are reviewed again on the next audit and appear as changed in that week's digest. After that they're stable.
 - **Try it locally first.** Run `audit` twice with the new setting. The affected pages are sent for review on the first run and not on the second.
+
+## Site context
+
+The review prompt is written for any website. A short description of yours makes reviews more specific: what counts as a page's main point depends on who's reading it, and a topic like "Fish" means something different on a research site than on a recipe site.
+
+The context isn't an environment variable. It lives in the **Context** field of the Site table in Airtable, so the people who know the site's audience can edit it alongside the topics. A few sentences is plenty:
+
+> A nonprofit that publishes research on animal welfare. Readers are mostly advocates, journalists and other researchers looking for findings they can cite. Pages should lead with the main finding and say where it comes from.
+
+Things to know:
+
+- **Describe the site; don't rewrite the instructions.** The context goes between Claude's role and the fixed rules, so it can shape what Claude looks for, but the rules about untrusted page text, scoring and topics always come after it.
+- **Keep it under 2,000 characters.** It's sent with every review. Past the limit, the run stops with a message rather than quietly growing the cost.
+- **Changing it re-reviews every page once.** The context is part of the review setup, so the next audit sends every page again and its summary says so beforehand. Edit it in one go rather than a sentence at a time.
+- **The digest uses it too,** for its opening paragraph.
+
+An empty Context leaves the prompts exactly as they'd be without it.

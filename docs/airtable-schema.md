@@ -1,6 +1,6 @@
 # Airtable schema
 
-Chickadee uses one base with four tables. Field names are case-sensitive and need to match exactly, including select options.
+Chickadee uses one base with five tables. Field names are case-sensitive and need to match exactly, including select options.
 
 ## Pages
 
@@ -11,6 +11,7 @@ One row per page. Each command writes its own group of fields, so the table read
 | URL | URL (primary) | You, or `import` |
 | Name | Single line text | You |
 | Active | Checkbox | You, or `import` |
+| Sitemap lastmod | Date with time | `import` |
 | Status | Single select: `Up`, `Down` | `uptime` |
 | Status since | Date with time | `uptime` |
 | Last checked | Date with time | `uptime` |
@@ -48,6 +49,8 @@ A few notes:
 - **Select options must already exist.** The API rejects values that aren't one of a field's options, so create them exactly as listed.
 - **Last checked is a plain date, not a rollup of Checks.** When only status changes are logged, the newest row in Checks usually isn't the newest check.
 - **Name is optional.** Anywhere a page is shown, its URL stands in when it has no name.
+- **Date fields need "Include time" turned on.** Without it, Airtable returns dates without a time zone, and comparing them with the current time fails.
+- **Sitemap lastmod is only set when a page is imported,** from the sitemap's own date for it. Pages added by hand leave it empty. It's only used as a fallback for staleness when nothing better is known.
 
 Two pairs of fields compare what's true now with what was last acted on:
 
@@ -99,3 +102,14 @@ The topics Claude can tag pages with. You manage this table, and each audit read
 | Description | Long text |
 
 Because Topics on Pages is a linked record field, each topic's row automatically lists every page tagged with it. Adding, renaming, removing or describing a topic changes the review setup, so the next audit sends every page for review again and retags it. Reordering topics doesn't. The audit's summary says when this is happening.
+
+## Site
+
+A description of the site that Claude reads before reviewing pages and writing the digest. You manage this table, and `audit` and `digest` read it. [Configuration](configuration.md#site-context) covers what to write.
+
+| Field | Type |
+|---|---|
+| Name | Single line text (primary) |
+| Context | Long text |
+
+Keep one row. The table has to exist, but Context can be empty, which leaves the prompts exactly as they'd be without it. Two rows with Context filled in, or a context over 2,000 characters, stops the run with a message saying what to fix. Changing the context changes the review setup, so the next audit reviews every page again.
