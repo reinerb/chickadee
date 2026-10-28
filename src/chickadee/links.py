@@ -8,7 +8,7 @@ from pyairtable import Api
 from pyairtable.api.types import UpdateRecordDict
 
 from chickadee.checker import make_client
-from chickadee.config import load_settings
+from chickadee.config import load_options, load_settings
 from chickadee.extractor import extract_links
 from chickadee.results import LinkResult, LinkStatus
 from chickadee.store import to_link_fields
@@ -30,14 +30,23 @@ def classify(status_code: int) -> LinkStatus:
     return "unverified"
 
 
+def redirected_home(requested: httpx.URL, final: httpx.URL) -> bool:
+    return requested.path not in ("", "/") and final.path in ("", "/")
+
+
 def check_link(client: httpx.Client, url: str) -> LinkResult:
     try:
         with client.stream("GET", url) as response:
             code = response.status_code
+            final = response.url
     except (httpx.ConnectError, httpx.InvalidURL, httpx.UnsupportedProtocol) as exc:
         return LinkResult(url, "broken", type(exc).__name__)
     except httpx.HTTPError as exc:
         return LinkResult(url, "unverified", type(exc).__name__)
+
+    status = classify(code)
+    if status == "ok" and redirected_home(httpx.URL(url), final):
+        return LinkResult(url, "unverified", "redirects to homepage")
 
     return LinkResult(url, classify(code), str(code))
 
@@ -55,6 +64,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
 
 def run(args: argparse.Namespace) -> None:
     settings = load_settings()
+    options = load_options()
     pages = Api(settings.airtable_token).table(settings.airtable_base_id, "Pages")
     records = pages.all(formula="{Active}", fields=["URL"])
 
@@ -78,7 +88,9 @@ def run(args: argparse.Namespace) -> None:
             ):
                 print(f"SKIP {url}: status {response.status_code}")
 
-            links = extract_links(response.text, str(response.url))
+            links = extract_links(
+                response.text, str(response.url), ignore=options.ignore_selectors
+            )
             page_links[record["id"]] = links[:MAX_LINKS_PER_PAGE]
 
         unique = list(

@@ -3,6 +3,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Literal
 
+import soupsieve
 from dotenv import load_dotenv
 
 CheckLog = Literal["all", "changes"]
@@ -19,6 +20,7 @@ class Options:
     check_log: CheckLog
     retention_days: int
     stale_after_days: int
+    ignore_selectors: str | None = None
 
 
 def _positive_int(env: Mapping[str, str], name: str, default: int) -> int:
@@ -29,6 +31,20 @@ def _positive_int(env: Mapping[str, str], name: str, default: int) -> int:
         raise RuntimeError(f"{name} must be a whole number, not {text!r}.") from None
     if value < 1:
         raise RuntimeError(f"{name} must be at least 1.")
+    return value
+
+
+def _selectors(env: Mapping[str, str], name: str) -> str | None:
+    value = env.get(name, "").strip()
+
+    if not value:
+        return None
+
+    try:
+        soupsieve.compile(value)
+    except soupsieve.SelectorSyntaxError as exc:
+        raise SystemExit(f"{name} isn't a valid CSS selector: {exc}") from None
+
     return value
 
 
@@ -78,6 +94,7 @@ def parse_options(env: Mapping[str, str]) -> Options:
         check_log=check_log,
         retention_days=_positive_int(env, "RETENTION_DAYS", 90),
         stale_after_days=_positive_int(env, "STALE_AFTER_DAYS", 365),
+        ignore_selectors=_selectors(env, "IGNORE_SELECTORS"),
     )
 
 

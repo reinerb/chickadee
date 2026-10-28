@@ -1,7 +1,7 @@
 import httpx
 import pytest
 
-from chickadee.links import check_link, classify, wait_needed
+from chickadee.links import check_link, classify, redirected_home, wait_needed
 
 
 def client_for(handler) -> httpx.Client:
@@ -56,3 +56,31 @@ def test_waits_only_for_the_rest_of_the_interval():
     assert wait_needed(None, 100.0, 1.0) == 0.0
     assert wait_needed(99.7, 100.0, 1.0) == pytest.approx(0.7)
     assert wait_needed(90.0, 100.0, 1.0) == 0.0
+
+
+@pytest.mark.parametrize(
+    ("requested", "final", "expected"),
+    [
+        ("https://example.org/old-report/", "https://example.org/", True),
+        ("https://old.example.org/report", "https://example.org", True),
+        ("https://example.org/", "https://example.org/", False),
+        ("https://example.org", "https://www.example.org/", False),
+        ("https://example.org/old/", "https://example.org/new/", False),
+    ],
+)
+def test_redirect_to_homepage(requested, final, expected):
+    assert redirected_home(httpx.URL(requested), httpx.URL(final)) is expected
+
+
+def test_link_that_lands_on_the_homepage_is_unverified():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/":
+            return httpx.Response(200)
+        return httpx.Response(301, headers={"Location": "https://example.org/"})
+
+    with client_for(handler) as client:
+        result = check_link(client, "https://example.org/retired-page/")
+        home = check_link(client, "https://example.org/")
+
+    assert (result.status, result.detail) == ("unverified", "redirects to homepage")
+    assert (home.status, home.detail) == ("ok", "200")

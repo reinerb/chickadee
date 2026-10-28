@@ -71,15 +71,23 @@ def page_modified_at(soup: BeautifulSoup) -> datetime | None:
     return None
 
 
-def extract_content(html: str) -> PageContent:
+def strip_ignored(soup: BeautifulSoup, ignore: str | None) -> None:
+    if ignore:
+        for element in soup.select(ignore):
+            element.decompose()
+
+
+def extract_content(html: str, ignore: str | None = None) -> PageContent:
     soup = BeautifulSoup(html, "html.parser")
 
     title = soup.title.get_text(strip=True) if soup.title else ""
-    h1s = tuple(h.get_text(" ", strip=True) for h in soup.select("h1"))
-    h2s = tuple(h.get_text(" ", strip=True) for h in soup.select("h2"))
+    modified_at = page_modified_at(soup)
     description = _meta_content(soup, 'meta[name="description"]')
 
-    modified_at = page_modified_at(soup)
+    strip_ignored(soup, ignore)
+
+    h1s = tuple(h.get_text(" ", strip=True) for h in soup.select("h1"))
+    h2s = tuple(h.get_text(" ", strip=True) for h in soup.select("h2"))
     body = _main_element(soup)
     text = " ".join(body.get_text(" ", strip=True).split())
 
@@ -94,9 +102,11 @@ def extract_content(html: str) -> PageContent:
     )
 
 
-def extract_links(html: str, page_url: str) -> list[str]:
+def extract_links(html: str, page_url: str, ignore: str | None = None) -> list[str]:
     soup = BeautifulSoup(html, "html.parser")
     page, _ = urldefrag(page_url)
+
+    strip_ignored(soup, ignore)
 
     links: list[str] = []
 

@@ -10,7 +10,7 @@ from pyairtable import Api
 from pyairtable.api.types import UpdateRecordDict
 
 from chickadee.checker import make_client
-from chickadee.config import load_anthropic_key, load_settings
+from chickadee.config import load_anthropic_key, load_options, load_settings
 from chickadee.extractor import content_hash, extract_content
 from chickadee.reviewer import (
     Topic,
@@ -33,6 +33,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
 
 def run(args: argparse.Namespace) -> None:
     settings = load_settings()
+    options = load_options()
     api = Api(settings.airtable_token)
     pages = api.table(settings.airtable_base_id, "Pages")
     batches = api.table(settings.airtable_base_id, "Audit batches")
@@ -79,7 +80,7 @@ def run(args: argparse.Namespace) -> None:
                 print(f"SKIP {url}: status {response.status_code}, {content_type}")
                 continue
 
-            content = extract_content(response.text)
+            content = extract_content(response.text, ignore=options.ignore_selectors)
             current = content_hash(content)
             change = classify_change(fields.get("Content hash"), current)
             counts[change] += 1

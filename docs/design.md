@@ -44,11 +44,15 @@ Alerts go out after both writes, so a failed save never produces an alert for a 
 
 It also lists tracked pages that have dropped out of the sitemap, since those may have moved or been deleted. Pages tracked from other sites aren't counted, and a `--contains` filter narrows what gets added without making the rest of the sitemap look missing. `--dry-run` shows exactly what would happen before anything changes.
 
-Sitemaps come from sites I don't control, so they're parsed with `defusedxml`, which blocks the malicious-XML tricks Python's standard parser is open to. Following indexes stops after 50 sitemaps, and a sitemap that points back to one already read is skipped, so a badly built sitemap can't send the importer in circles.
+**URLs are matched by what they point to, not character by character.** `https://example.org/page` and `http://Example.org/page/#top` are the same page, so the comparison ignores the scheme, capitals in the domain, a trailing slash, a `#fragment` and stray spaces. Differences that can mean a different page are kept: the path's capitalization, query strings, and `www.`. When it's unclear whether two URLs are the same page, they're treated as different, because a duplicate is easy to spot and delete, while a page skipped because it looked like another is silently missing. The comparison is only used for matching. Pages are saved with the URL exactly as the sitemap lists it.
+
+**Sitemaps are untrusted input.** They're parsed with `defusedxml`, which blocks the malicious-XML tricks Python's standard parser is open to. Following indexes stops after 50 sitemaps, and a sitemap that points back to one already read is skipped, so a badly built sitemap can't send the importer in circles.
+
+**Compressed sitemaps are capped.** Gzipped sitemaps (`.xml.gz`) are recognized by the first two bytes of the file rather than the extension, since some servers decompress them on the way and the name no longer matches the contents. A few kilobytes of gzip can expand to gigabytes, so both the download and the decompression stop at 50 MB, the sitemap standard's own maximum. Decompression asks zlib for at most one byte more than the limit, so an oversized file is caught without ever being unpacked in full.
 
 ## Tracking changes
 
-Each audit fingerprints every page: a short hash of its title, meta description and main text. Navigation, headers and footers are stripped and whitespace is collapsed first, so reformatting or a new menu item doesn't count as a change. The fingerprint is the first 16 characters of a SHA-256 hash, which is plenty to tell versions of a page apart.
+Each audit fingerprints every page: a short hash of its title, meta description and main text. Navigation, headers and footers are stripped and whitespace is collapsed first, so reformatting or a new menu item doesn't count as a change. Sections listed in `IGNORE_SELECTORS`, like a related-posts widget, are stripped too. [Configuration](configuration.md#ignoring-parts-of-a-page) covers that setting. The fingerprint is the first 16 characters of a SHA-256 hash, which is plenty to tell versions of a page apart.
 
 The point is to only review what's new. Claude sees a page when it's first added and again whenever its content changes, not every page every week. For a stable site, a weekly batch is usually a handful of pages.
 
@@ -82,13 +86,13 @@ Whether the main point comes first matters because AI search tools tend to quote
 
 **Page text is treated as untrusted.** It goes inside its own tags, and the system prompt tells Claude to review it, not follow any instructions in it. The fixed output shape also limits what a manipulated response could do.
 
-**Reviews go through the Message Batches API** instead of one call per page. Nobody needs them instantly, and batch requests cost half as much. Batches waiting to be collected are tracked in Airtable, so `collect` works the same from a scheduled job as from a laptop, and it's safe to run as often as you like.
+**Reviews go through the Message Batches API** instead of one call per page. Nobody needs them instantly, and batch requests cost half as much. Batches waiting to be collected are tracked in Airtable, so `collect` works the same from a scheduled job as from a laptop, and it's safe to run as often as you like. A page deleted from Airtable while its review was in progress is skipped when the batch is saved. Otherwise Airtable would reject the whole save, and the batch would fail on every run from then on.
 
 **Models were chosen by trying them.** The page review uses Claude Sonnet: I ran Haiku and Sonnet on the same pages, and Sonnet's critiques were noticeably more useful. The digest's opening paragraph uses Claude Haiku, because the task is simple and Haiku is the cheapest option.
 
 ## Checking links
 
-`chickadee links` checks the links inside each page's main content, using the same definition of main content as change tracking. That way a broken menu link doesn't get reported on every page in the site. Relative links are resolved against the page's final address after any redirects, fragments like `#methods` are removed, and links that can't be checked over HTTP, such as `mailto:`, are skipped.
+`chickadee links` checks the links inside each page's main content, using the same definition of main content as change tracking, including any `IGNORE_SELECTORS`. That way a broken menu link doesn't get reported on every page in the site. Relative links are resolved against the page's final address after any redirects, fragments like `#methods` are removed, and links that can't be checked over HTTP, such as `mailto:`, are skipped.
 
 Each unique link is checked once, however many pages use it. Requests to the same site wait a second between them, while links to different sites don't wait for each other. Each check streams the response and stops at the status code, so no page bodies are downloaded. That also works with servers that handle HEAD requests badly.
 
@@ -97,8 +101,10 @@ A link checker that flags working links quickly stops being trusted, so results 
 | Result | What counts |
 |---|---|
 | Broken | 404 or 410, a domain that doesn't exist or refuses connections, or a malformed link |
-| Unverified | 403, 429, server errors and timeouts, which usually mean a site is blocking automated requests or is briefly down |
-| OK | Anything that ends in success after following redirects |
+| Unverified | 403, 429, server errors and timeouts, which usually mean a site is blocking automated requests or is briefly down. Also a link to a specific page that redirects to a site's homepage. |
+| OK | Anything else that ends in success after following redirects |
+
+When a page is retired, many sites redirect its address to the homepage instead of returning a 404, so the link "works" but whatever it pointed to is gone. Those links are reported as unverified rather than broken, because some redirects to the homepage are legitimate, like `/index.html` or `/en/`. They need a person to look, which is what the unverified list is for.
 
 Broken and unverified links go in separate fields, so the broken list stays reliable. Once a link is fixed, it drops off on the next run.
 
@@ -142,12 +148,10 @@ Requests identify the tool with a User-Agent that links back to this repo, so a 
 ## Limitations
 
 - Once a webhook accepts a message, delivering it is up to the receiver. Problems after that point show up in the receiving tool's logs, not here.
-- Imports match URLs exactly, so `https://example.org/page` and `https://example.org/page/` count as different pages. Compressed (`.xml.gz`) sitemaps aren't supported.
+- Imports treat `www.example.org` and `example.org` as different sites, since they can be. If your Airtable uses one and your sitemap the other, pages are imported twice.
 - Claude reads only the first 3,000 words of a page, so very long pages are reviewed on their opening.
 - Changing the topic list doesn't retag existing pages until they change or `audit --all` runs.
-- Anything that changes every time a page loads, like a timestamp, makes the page look edited and sends it for review every week. Navigation, headers and footers are stripped, but other changing sections have to be added to the extractor by hand.
-- Link checks only catch links that fail outright. A link that redirects to a site's homepage, or to a "page not found" message sent with a success code, looks fine. Each page's check stops after its first 100 links.
+- A link to a "page not found" message that's sent with a success code, rather than a 404, looks fine. Each page's check stops after its first 100 links.
 - Pages that don't declare a modified date can't be flagged as stale until they've gone unchanged for the full staleness period after being added.
 - If a page went down more than a week ago and has since recovered, the digest doesn't list it as an event. Its current status still shows how long it's been back up.
-- If a page is deleted from Airtable between `audit` and `collect`, saving that batch fails.
 - Every page is a record too, so very large imports can still reach the free plan's limit, whatever the logging setting.

@@ -172,6 +172,7 @@ dependencies = [
     { name = "pyairtable" },
     { name = "pydantic" },
     { name = "python-dotenv" },
+    { name = "soupsieve" },
 ]
 
 [package.dev-dependencies]
@@ -191,6 +192,7 @@ requires-dist = [
     { name = "pyairtable", specifier = ">=3.5.0.post1" },
     { name = "pydantic", specifier = ">=2.14.1" },
     { name = "python-dotenv", specifier = ">=1.2.4" },
+    { name = "soupsieve", specifier = ">=3.0.4" },
 ]
 
 [package.metadata.requires-dev]
