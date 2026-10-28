@@ -13,6 +13,7 @@ from chickadee.flags import (
     facts_from_record,
     find_flags,
     flag_update,
+    last_updated,
 )
 
 NOW = datetime(2026, 10, 26, 12, 0, tzinfo=UTC)
@@ -28,6 +29,10 @@ HEALTHY: dict[str, Any] = {
     "Key point up front": "Yes",
     "Page modified at": "2026-09-01T00:00:00.000Z",
 }
+
+
+def page(**fields: Any) -> RecordDict:
+    return {"id": "rec1", "createdTime": "2026-10-01T00:00:00.000Z", "fields": fields}
 
 
 def flags_for(
@@ -73,3 +78,21 @@ def test_only_real_changes_are_written():
     assert flag_update(current, [DOWN, STALE]) is None
     assert flag_update(current, []) == {"Attention": [], "Attention count": 0}
     assert flag_update({}, []) == {"Attention": [], "Attention count": 0}
+
+
+def test_sitemap_date_stands_in_when_nothing_better_is_known():
+    assert last_updated(page()) == datetime(2026, 10, 1, tzinfo=UTC)
+    assert last_updated(
+        page(**{"Sitemap lastmod": "2024-03-01T00:00:00+00:00"})
+    ) == datetime(2024, 3, 1, tzinfo=UTC)
+
+
+def test_page_date_beats_a_newer_sitemap_date():
+    record = page(
+        **{
+            "Sitemap lastmod": "2026-10-20T00:00:00+00:00",
+            "Page modified at": "2023-01-01T00:00:00+00:00",
+        }
+    )
+
+    assert last_updated(record) == datetime(2023, 1, 1, tzinfo=UTC)

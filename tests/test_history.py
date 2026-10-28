@@ -3,7 +3,7 @@ from typing import Any
 
 from pyairtable.api.types import RecordDict
 
-from chickadee.history import describe_duration, find_events
+from chickadee.history import describe_duration, find_events, latest_status
 
 
 def make_check(page_id: str, at: str, ok: bool) -> RecordDict:
@@ -54,6 +54,33 @@ def test_input_order_does_not_matter():
     ]
 
     assert [event.status for event in find_events(checks)] == ["Down", "Up"]
+
+
+def test_recovery_from_an_outage_before_the_week_is_an_event():
+    week = [make_check("recA", "2026-10-22T10:00:00.000Z", ok=True)]
+
+    assert find_events(week) == []
+    events = find_events(week, {"recA": "Down"})
+    assert [(event.page_id, event.status) for event in events] == [("recA", "Up")]
+
+
+def test_page_already_down_doesnt_go_down_again():
+    week = [make_check("recA", "2026-10-22T10:00:00.000Z", ok=False)]
+
+    assert find_events(week, {"recA": "Down"}) == []
+
+
+def test_latest_status_stops_once_every_page_is_found():
+    checks = [
+        make_check("recA", "2026-10-19T00:00:00.000Z", ok=False),
+        make_check("recA", "2026-10-10T00:00:00.000Z", ok=True),
+        make_check("recB", "2026-10-05T00:00:00.000Z", ok=True),
+        make_check("recC", "2026-10-01T00:00:00.000Z", ok=False),
+    ]
+    remaining = iter(checks)
+
+    assert latest_status(remaining, {"recA", "recB"}) == {"recA": "Down", "recB": "Up"}
+    assert next(remaining) is checks[3]
 
 
 def test_durations_are_formatted_by_size():
