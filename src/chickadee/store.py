@@ -9,6 +9,7 @@ from chickadee.results import LinkResult
 from chickadee.reviewer import PageReview
 
 ContentChange = Literal["new", "changed", "unchanged"]
+ReviewState = Literal["new", "changed", "setup", "baseline", "current"]
 
 
 def classify_change(previous_hash: str | None, current_hash: str) -> ContentChange:
@@ -18,8 +19,21 @@ def classify_change(previous_hash: str | None, current_hash: str) -> ContentChan
     return "unchanged" if previous_hash == current_hash else "changed"
 
 
-def needs_review(reviewed_hash: str | None, current_hash: str) -> bool:
-    return reviewed_hash != current_hash
+def needs_review(
+    reviewed_hash: str | None,
+    content_hash: str,
+    reviewed_version: str | None,
+    version: str,
+) -> ReviewState:
+    if reviewed_hash is None:
+        return "new"
+    if reviewed_hash != content_hash:
+        return "changed"
+    if reviewed_version is None:
+        return "baseline"
+    if reviewed_version != version:
+        return "setup"
+    return "current"
 
 
 def match_topics(
