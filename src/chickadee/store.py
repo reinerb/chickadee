@@ -19,7 +19,7 @@ def classify_change(previous_hash: str | None, current_hash: str) -> ContentChan
     return "unchanged" if previous_hash == current_hash else "changed"
 
 
-def needs_review(
+def review_state(
     reviewed_hash: str | None,
     content_hash: str,
     reviewed_version: str | None,
@@ -92,6 +92,7 @@ def to_review_fields(
     review: PageReview,
     reviewed_at: datetime,
     reviewed_hash: str | None,
+    version: str | None,
     topic_ids: Sequence[str],
 ) -> dict[str, Any]:
     fields: dict[str, Any] = {
@@ -109,6 +110,8 @@ def to_review_fields(
 
     if reviewed_hash is not None:
         fields["Reviewed hash"] = reviewed_hash
+    if version is not None:
+        fields["Review version"] = version
 
     return fields
 

@@ -75,12 +75,12 @@ def run(args: argparse.Namespace) -> None:
             if unknown:
                 print(f"  {result.custom_id}: unknown topic(s): {', '.join(unknown)}")
 
-            record_id, reviewed_hash = parse_custom_id(result.custom_id)
+            record_id, reviewed_hash, version = parse_custom_id(result.custom_id)
             updates.append(
                 {
                     "id": record_id,
                     "fields": to_review_fields(
-                        review, reviewed_at, reviewed_hash, matched
+                        review, reviewed_at, reviewed_hash, version, matched
                     ),
                 }
             )
