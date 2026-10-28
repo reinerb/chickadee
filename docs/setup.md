@@ -121,8 +121,8 @@ Make's free plan allows two active scenarios, which alerts and the digest use ex
 
 ```bash
 uv run chickadee uptime
-uv run chickadee audit          # only new and changed pages are reviewed
-uv run chickadee audit --all    # review every page, for example after changing topics
+uv run chickadee audit          # reviews new and changed pages, and all pages after a topic or prompt change
+uv run chickadee audit --all    # review every page once, regardless
 uv run chickadee collect        # safe to run as often as you like
 uv run chickadee links
 uv run chickadee flags

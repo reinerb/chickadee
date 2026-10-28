@@ -17,10 +17,13 @@ from chickadee.reviewer import (
     build_review_request,
     build_system_prompt,
     review_schema,
+    review_version,
 )
-from chickadee.store import classify_change, needs_review, to_content_fields
+from chickadee.store import classify_change, review_state, to_content_fields
 
 HELP = "Read each page, record changes, and send new or changed pages for review."
+
+NEEDS_REVIEW = ("new", "changed", "setup")
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
@@ -38,29 +41,36 @@ def run(args: argparse.Namespace) -> None:
     pages = api.table(settings.airtable_base_id, "Pages")
     batches = api.table(settings.airtable_base_id, "Audit batches")
 
-    topics = [
-        Topic(
-            name=record["fields"]["Name"],
-            description=record["fields"].get("Description"),
-        )
-        for record in api.table(settings.airtable_base_id, "Topics").all(
-            fields=["Name", "Description"]
-        )
-        if record["fields"].get("Name")
-    ]
+    topics = sorted(
+        (
+            Topic(
+                name=record["fields"]["Name"],
+                description=record["fields"].get("Description"),
+            )
+            for record in api.table(settings.airtable_base_id, "Topics").all(
+                fields=["Name", "Description"]
+            )
+            if record["fields"].get("Name")
+        ),
+        key=lambda topic: topic.name.casefold(),
+    )
     if not topics:
         raise SystemExit("Add at least one topic to the Topics table before auditing.")
 
     system = build_system_prompt(topics)
     schema = review_schema([topic.name for topic in topics])
+    version = review_version(system, schema)
+    print(f"Review version {version}")
 
     audited_at = datetime.now(UTC)
     updates: list[UpdateRecordDict] = []
     requests: list[Request] = []
     counts: Counter[str] = Counter()
+    states: Counter[str] = Counter()
 
     records = pages.all(
-        formula="{Active}", fields=["URL", "Content hash", "Reviewed hash"]
+        formula="{Active}",
+        fields=["URL", "Content hash", "Reviewed hash", "Review version"],
     )
 
     with make_client() as client:
@@ -85,14 +95,20 @@ def run(args: argparse.Namespace) -> None:
             change = classify_change(fields.get("Content hash"), current)
             counts[change] += 1
 
-            updates.append(
-                {
-                    "id": record["id"],
-                    "fields": to_content_fields(content, current, change, audited_at),
-                }
+            state = review_state(
+                fields.get("Reviewed hash"),
+                current,
+                fields.get("Review version"),
+                version,
             )
+            states[state] += 1
 
-            if args.all or needs_review(fields.get("Reviewed hash"), current):
+            page_fields = to_content_fields(content, current, change, audited_at)
+            if state == "baseline":
+                page_fields["Review version"] = version
+            updates.append({"id": record["id"], "fields": page_fields})
+
+            if args.all or state in NEEDS_REVIEW:
                 requests.append(
                     build_review_request(
                         record["id"],
@@ -101,18 +117,30 @@ def run(args: argparse.Namespace) -> None:
                         content,
                         system=system,
                         schema=schema,
+                        version=version,
                     )
                 )
                 action = "review"
             else:
                 action = "skip"
-            print(f"{change:<9} {action:<6} {url}")
+            print(f"{change:<9} {action:<6} {state:<8} {url}")
 
     if updates:
         pages.batch_update(updates)
     print(
-        f"{counts['new']} new, {counts['changed']} changed, {counts['unchanged']} unchanged."
+        f"{counts['new']} new, {counts['changed']} changed, "
+        f"{counts['unchanged']} unchanged."
     )
+    if states["baseline"]:
+        print(
+            f"Recorded the review version for {states['baseline']} page(s) "
+            "reviewed before versions were tracked."
+        )
+    if states["setup"]:
+        print(
+            f"{states['setup']} page(s) will be reviewed again "
+            "because the review setup changed."
+        )
 
     if not requests:
         print("No pages need review.")
@@ -128,4 +156,4 @@ def run(args: argparse.Namespace) -> None:
         }
     )
     print(f"Submitted batch {batch.id} with {len(requests)} page(s).")
-    print("Run `uv run content-collect` later to save the reviews.")
+    print("Run `uv run chickadee collect` later to save the reviews.")

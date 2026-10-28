@@ -1,6 +1,8 @@
 from datetime import UTC, datetime
 from typing import Any
 
+import pytest
+
 from chickadee.checker import CheckResult
 from chickadee.extractor import PageContent, content_hash
 from chickadee.results import LinkResult
@@ -8,7 +10,7 @@ from chickadee.reviewer import PageReview
 from chickadee.store import (
     classify_change,
     match_topics,
-    needs_review,
+    review_state,
     should_log,
     to_check_fields,
     to_content_fields,
@@ -92,7 +94,7 @@ def test_connection_failure_omits_missing_values():
 
 
 def test_missing_title_is_sent_as_none_to_clear_old_value():
-    fields = to_content_fields(CONTENT, content_hash(CONTENT), "new", datetime.now())
+    fields = to_content_fields(CONTENT, content_hash(CONTENT), "new", CHECKED_AT)
 
     assert "Current title" in fields
     assert fields["Current title"] is None
@@ -102,7 +104,7 @@ def test_review_fields_include_score_and_bulleted_issues():
     review = make_review()
 
     fields = to_review_fields(
-        review, CHECKED_AT, content_hash(CONTENT), ["Has problems"]
+        review, CHECKED_AT, content_hash(CONTENT), "v1", ["recFish"]
     )
 
     assert fields["SEO score"] == 6
@@ -136,10 +138,19 @@ def test_change_classification():
     assert classify_change("abc", "xyz") == "changed"
 
 
-def test_review_needed_until_the_current_version_is_reviewed():
-    assert needs_review(None, "abc")
-    assert needs_review("old", "abc")
-    assert not needs_review("abc", "abc")
+@pytest.mark.parametrize(
+    ("reviewed_hash", "reviewed_version", "state"),
+    [
+        (None, None, "new"),
+        ("old", "v1", "changed"),
+        ("old", None, "changed"),
+        ("now", None, "baseline"),
+        ("now", "v0", "setup"),
+        ("now", "v1", "current"),
+    ],
+)
+def test_review_state(reviewed_hash, reviewed_version, state):
+    assert review_state(reviewed_hash, "now", reviewed_version, "v1") == state
 
 
 def test_changed_at_is_only_set_for_real_changes():
@@ -161,15 +172,24 @@ def test_topics_match_case_insensitively_and_report_unknowns():
 
 
 def test_key_point_is_saved_as_yes_or_no():
-    up_front = to_review_fields(make_review(), CHECKED_AT, "abc", ["recFish"])
+    up_front = to_review_fields(make_review(), CHECKED_AT, "abc", "v1", ["recFish"])
     buried = to_review_fields(
-        make_review(key_point_up_front=False), CHECKED_AT, "abc", []
+        make_review(key_point_up_front=False), CHECKED_AT, "abc", "v1", []
     )
 
     assert up_front["Key point up front"] == "Yes"
     assert buried["Key point up front"] == "No"
     assert up_front["Topics"] == ["recFish"]
     assert buried["Topics"] == []
+
+
+def test_review_version_is_saved_only_when_known():
+    current = to_review_fields(make_review(), CHECKED_AT, "abc", "v1", ["recFish"])
+    old_batch = to_review_fields(make_review(), CHECKED_AT, "abc", None, ["recFish"])
+
+    assert current["Review version"] == "v1"
+    assert "Review version" not in old_batch
+    assert old_batch["Reviewed hash"] == "abc"
 
 
 def test_link_fields_separate_broken_from_unverified():

@@ -1,3 +1,5 @@
+import hashlib
+import json
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -11,6 +13,7 @@ from chickadee.extractor import PageContent
 
 MODEL = "claude-sonnet-5-5"
 MAX_WORDS = 3000
+REVIEW_REVISION = 1  # bump after changing how pages are presented to Claude
 
 BASE_PROMPT = """You review web pages. For each page, first describe what it says, then judge
 how easily it can be found and understood, both by search engines and by AI tools
@@ -57,6 +60,18 @@ class PageReview(BaseModel):
     )
 
 
+def review_version(system: str, schema: dict[str, Any]) -> str:
+    setup = {
+        "revision": REVIEW_REVISION,
+        "model": MODEL,
+        "max_words": MAX_WORDS,
+        "system": system,
+        "schema": schema,
+    }
+    encoded = json.dumps(setup, sort_keys=True).encode()
+    return hashlib.sha256(encoded).hexdigest()[:12]
+
+
 def build_system_prompt(topics: Sequence[Topic]) -> str:
     lines = [
         f"- {t.name}: {t.description}" if t.description else f"- {t.name}"
@@ -96,13 +111,14 @@ def format_page_for_review(
     )
 
 
-def make_custom_id(record_id: str, content_hash: str) -> str:
-    return f"{record_id}-{content_hash}"
+def make_custom_id(record_id: str, content_hash: str, version: str) -> str:
+    return f"{record_id}-{content_hash}-{version}"
 
 
-def parse_custom_id(custom_id: str) -> tuple[str, str | None]:
-    record_id, _, content_hash = custom_id.partition("-")
-    return record_id, content_hash or None
+def parse_custom_id(custom_id: str) -> tuple[str, str | None, str | None]:
+    record_id, _, rest = custom_id.partition("-")
+    content_hash, _, version = rest.partition("-")
+    return record_id, content_hash or None, version or None
 
 
 def build_review_request(
@@ -113,9 +129,10 @@ def build_review_request(
     *,
     system: str,
     schema: dict[str, Any],
+    version: str,
 ) -> Request:
     return {
-        "custom_id": make_custom_id(record_id, content_hash),
+        "custom_id": make_custom_id(record_id, content_hash, version),
         "params": {
             "model": MODEL,
             "max_tokens": 8000,

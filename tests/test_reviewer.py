@@ -1,6 +1,7 @@
 import json
 import re
 
+from chickadee import reviewer
 from chickadee.extractor import PageContent
 from chickadee.reviewer import (
     Topic,
@@ -10,9 +11,11 @@ from chickadee.reviewer import (
     parse_custom_id,
     parse_review_text,
     review_schema,
+    review_version,
     truncate_words,
 )
 
+SCHEMA = {"properties": {"topics": {"items": {"enum": ["Fish", "Policy"]}}}}
 VALID = {
     "content_summary": "A summary.",
     "key_point": "The main finding.",
@@ -26,6 +29,9 @@ VALID = {
 }
 
 
+# Reading Claude's answers
+
+
 def test_valid_review_parses():
     review = parse_review_text(json.dumps(VALID))
 
@@ -37,20 +43,61 @@ def test_out_of_range_score_is_rejected():
     assert parse_review_text(json.dumps(VALID | {"score": 11})) is None
 
 
-def test_custom_id_round_trips():
-    custom_id = make_custom_id("recABC123", "0123456789abcdef")
+# Custom IDs
 
-    assert parse_custom_id(custom_id) == ("recABC123", "0123456789abcdef")
+
+def test_custom_id_round_trips():
+    custom_id = make_custom_id("recABC123", "0123456789abcdef", "abcdef012345")
+
+    assert parse_custom_id(custom_id) == (
+        "recABC123",
+        "0123456789abcdef",
+        "abcdef012345",
+    )
+
+
+def test_custom_ids_from_before_versions_still_parse():
+    assert parse_custom_id("recABC123-0123456789abcdef") == (
+        "recABC123",
+        "0123456789abcdef",
+        None,
+    )
 
 
 def test_custom_ids_from_before_hashing_still_parse():
-    assert parse_custom_id("recABC123") == ("recABC123", None)
+    assert parse_custom_id("recABC123") == ("recABC123", None, None)
 
 
 def test_custom_id_fits_the_batch_api_rules():
-    custom_id = make_custom_id("rec" + "x" * 14, "f" * 16)
+    custom_id = make_custom_id("rec" + "x" * 14, "f" * 16, "e" * 12)
 
     assert re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", custom_id)
+
+
+# Review version
+
+
+def test_review_version_is_stable():
+    assert review_version("Prompt", SCHEMA) == review_version("Prompt", SCHEMA)
+    assert re.fullmatch(r"[0-9a-f]{12}", review_version("Prompt", SCHEMA))
+
+
+def test_review_version_changes_with_the_setup(monkeypatch):
+    before = review_version("Prompt", SCHEMA)
+    renamed = {"properties": {"topics": {"items": {"enum": ["Fish", "Law"]}}}}
+
+    assert review_version("Prompt, edited", SCHEMA) != before
+    assert review_version("Prompt", renamed) != before
+
+    monkeypatch.setattr(reviewer, "MODEL", "claude-haiku-5-5")
+    assert review_version("Prompt", SCHEMA) != before
+    monkeypatch.undo()
+
+    monkeypatch.setattr(reviewer, "REVIEW_REVISION", 2)
+    assert review_version("Prompt", SCHEMA) != before
+
+
+# Preparing pages for review
 
 
 def test_truncation_happens_at_word_boundaries():

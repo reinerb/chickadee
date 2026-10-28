@@ -34,6 +34,7 @@ One row per page. Each command writes its own group of fields, so the table read
 | SEO issues | Long text | `collect` |
 | Last audited | Date with time | `collect` |
 | Reviewed hash | Single line text | `collect` |
+| Review version | Single line text | `collect`, or `audit` for pages reviewed before versions existed |
 | Broken links | Long text | `links` |
 | Unverified links | Long text | `links` |
 | Broken link count | Number | `links` |
@@ -53,7 +54,9 @@ Two pairs of fields compare what's true now with what was last acted on:
 - **Content hash and Reviewed hash:** the page as it is now, and as Claude last saw it. A page needs a review when they differ. See [Tracking changes](design.md#tracking-changes).
 - **Status and Alerted status:** what the page is doing now, and what was last announced. An alert is due when they differ. See [Uptime](design.md#uptime).
 
-Leave Reviewed hash and Alerted status empty when adding pages. Chickadee fills them in.
+Review version works the same way, compared against the current review setup rather than another field: a page is reviewed again when its version doesn't match. See [When the review itself changes](design.md#when-the-review-itself-changes).
+
+Leave Reviewed hash, Review version and Alerted status empty when adding pages. Chickadee fills them in.
 
 ### Views
 
@@ -95,4 +98,4 @@ The topics Claude can tag pages with. You manage this table, and each audit read
 | Name | Single line text (primary) |
 | Description | Long text |
 
-Because Topics on Pages is a linked record field, each topic's row automatically lists every page tagged with it. Changing the list doesn't retag existing pages until they change or `chickadee audit --all` runs.
+Because Topics on Pages is a linked record field, each topic's row automatically lists every page tagged with it. Adding, renaming, removing or describing a topic changes the review setup, so the next audit sends every page for review again and retags it. Reordering topics doesn't. The audit's summary says when this is happening.
