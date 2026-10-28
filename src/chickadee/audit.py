@@ -128,4 +128,4 @@ def run(args: argparse.Namespace) -> None:
         }
     )
     print(f"Submitted batch {batch.id} with {len(requests)} page(s).")
-    print("Run `uv run content-collect` later to save the reviews.")
+    print("Run `uv run chickadee collect` later to save the reviews.")
