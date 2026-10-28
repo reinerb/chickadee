@@ -20,8 +20,8 @@ The tests cover the logic that decides things, and none of them touch the networ
 That's possible because the code is split the same way throughout: small functions make the decisions, and a thin `run` function in each command fetches data, calls them, and saves the results. The decisions are what get tested:
 
 - **Uptime and alerts:** reading settings, retrying failed checks, deciding what gets logged and when to alert, working out when an outage started, building alert payloads and tracking which were delivered, turning a log into outage and recovery events.
-- **Content:** pulling text, links and dates out of HTML, ignoring configured sections, fingerprinting it, deciding what needs a review.
-- **Reviews:** building prompts and schemas, cutting long pages down, reading and writing batch custom IDs, validating Claude's answers, matching topics, skipping pages that were deleted.
+- **Content:** pulling text, links and dates out of HTML, ignoring configured sections, fingerprinting it, deciding what needs a review and why.
+- **Reviews:** building prompts and schemas, cutting long pages down, reading and writing batch custom IDs, validating Claude's answers, matching topics, skipping pages that were deleted, fingerprinting the review setup.
 - **Links:** finding links in a page, classifying results, spotting redirects to the homepage, pacing requests to each site.
 - **Flags and the digest:** deciding which flags apply, building the digest, turning it into safe email HTML.
 - **Plumbing:** reading sitemaps (including compressed and oversized ones), matching URLs that are written differently, deciding what to import, building Airtable formulas and fields, wiring up the command line.
@@ -85,7 +85,8 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--example", action="store_true", help="...")
 
 
-def run(args: argparse.Namespace) -> None: ...
+def run(args: argparse.Namespace) -> None:
+    ...
 ```
 
 To add one, write the module and add it to `COMMANDS` in `cli.py`. A `Protocol` in `cli.py` describes this shape, so Pyright checks every command module has all three. `tests/test_cli.py` checks that every command's `--help` works.

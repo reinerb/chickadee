@@ -54,7 +54,7 @@ It also lists tracked pages that have dropped out of the sitemap, since those ma
 
 Each audit fingerprints every page: a short hash of its title, meta description and main text. Navigation, headers and footers are stripped and whitespace is collapsed first, so reformatting or a new menu item doesn't count as a change. Sections listed in `IGNORE_SELECTORS`, like a related-posts widget, are stripped too. [Configuration](configuration.md#ignoring-parts-of-a-page) covers that setting. The fingerprint is the first 16 characters of a SHA-256 hash, which is plenty to tell versions of a page apart.
 
-The point is to only review what's new. Claude sees a page when it's first added and again whenever its content changes, not every page every week. For a stable site, a weekly batch is usually a handful of pages.
+The point is to only review what's new. Claude sees a page when it's first added, again whenever its content changes, and again when the way pages are reviewed changes, but not every page every week. For a stable site, a weekly batch is usually a handful of pages.
 
 Each page keeps two hashes:
 
@@ -65,7 +65,33 @@ A page needs a review whenever the two differ. That makes failed reviews fix the
 
 The reviewed hash has to be the version Claude actually saw, not whatever the page looks like when the results come back. So the hash travels with the request, in the batch's custom ID next to the page's record ID. The API caps custom IDs at 64 characters, which is why the hash is short.
 
-A page's first audit sets a baseline and doesn't count as a change. `chickadee audit --all` reviews everything regardless, for when the review itself has changed: a new prompt, model or topic list.
+A page's first audit sets a baseline and doesn't count as a change.
+
+### When the review itself changes
+
+A review depends on more than the page. It also depends on the setup: the model, the system prompt, the topic list and the word cutoff. Adding a topic leaves every existing review incomplete, even though no page has changed.
+
+So the setup gets a fingerprint too. The **review version** is a 12-character hash of everything that shapes a review except the page:
+
+- the model
+- the system prompt, which includes the topic descriptions
+- the schema, which includes the topic names
+- the word cutoff
+- a revision number in the code
+
+Change any of them and the version changes. Each page stores the version its review was written with, and a page whose version doesn't match the current one is reviewed again. The version travels in the custom ID alongside the content hash (`record-contenthash-version`, 47 characters), so `collect` records the setup Claude actually used, even if the setup changed while the batch was running.
+
+It's a separate field rather than part of Reviewed hash for two reasons:
+
+- **Reviewed hash keeps its meaning,** "the content Claude saw," which the digest relies on to mark reviews as pending.
+- **The audit can say why each page is going out:** new, changed content, or a new setup. Changing a topic re-reviews every page, since every review picks topics. The audit's summary says so before the batch is sent, so a full re-review is never a surprise. At under a cent a page, that's a few dollars for a few hundred pages.
+
+A few details:
+
+- **Topics are sorted by name before the prompt and schema are built.** Otherwise reordering topics in Airtable would count as a new setup.
+- **Pages reviewed before versions existed get a baseline.** When a page's content matches its review and it has no version, the current version is written down without a re-review, the same way a page's first uptime check records "Up" without an alert. This assumes those reviews match the current setup, so this feature shouldn't ship in the same change as a new prompt or topic list.
+- **Old batches still collect.** A custom ID without a version is read as "version unknown," and the field is left alone rather than cleared.
+- **The revision number covers what the fingerprint can't see,** like a change to how the page text is laid out for Claude. Bumping it re-reviews everything, and if a batch fails, the next scheduled audit retries it. `chickadee audit --all` is still there for a one-off review of every page, but it doesn't persist.
 
 ## Reviews with Claude
 
@@ -80,7 +106,7 @@ Whether the main point comes first matters because AI search tools tend to quote
 
 **The shape is a Pydantic model.** Its schema is sent with every request using structured outputs, so the answer always comes back in the same shape and maps straight onto Airtable fields. The descriptive fields come before the score in the schema, and structured output keeps that order, so Claude writes down what a page says before judging it. The API can't enforce number ranges, so the score's 1 to 10 range is checked with Pydantic when results come in.
 
-**Topics come from Airtable,** so the list can change without touching code. Each audit loads it and adds it to the schema as an enum, so Claude can only choose topics that exist. The API doesn't guarantee the capitalization of enum values, so names are matched case-insensitively when reviews are saved, and any name that doesn't match is reported instead of dropped silently.
+**Topics come from Airtable,** so the list can change without touching code. Each audit loads it and adds it to the schema as an enum, so Claude can only choose topics that exist. Changing the list counts as a new review setup, so every page is retagged on the next audit. The API doesn't guarantee the capitalization of enum values, so names are matched case-insensitively when reviews are saved, and any name that doesn't match is reported instead of dropped silently.
 
 **Long pages are cut off at 3,000 words,** at a word boundary, and the prompt says so. That keeps a review well under a cent at Sonnet's batch price. The content hash still covers the full text, so an edit past the cutoff still triggers a review.
 
@@ -150,7 +176,6 @@ Requests identify the tool with a User-Agent that links back to this repo, so a 
 - Once a webhook accepts a message, delivering it is up to the receiver. Problems after that point show up in the receiving tool's logs, not here.
 - Imports treat `www.example.org` and `example.org` as different sites, since they can be. If your Airtable uses one and your sitemap the other, pages are imported twice.
 - Claude reads only the first 3,000 words of a page, so very long pages are reviewed on their opening.
-- Changing the topic list doesn't retag existing pages until they change or `audit --all` runs.
 - A link to a "page not found" message that's sent with a success code, rather than a 404, looks fine. Each page's check stops after its first 100 links.
 - Pages that don't declare a modified date can't be flagged as stale until they've gone unchanged for the full staleness period after being added.
 - If a page went down more than a week ago and has since recovered, the digest doesn't list it as an event. Its current status still shows how long it's been back up.
