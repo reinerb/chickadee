@@ -6,7 +6,7 @@ readme = "README.md"
 authors = [{ name = "ben", email = "ben@tidemarkstudio.dev" }]
 requires-python = ">=3.14"
 dependencies = [
-    "anthropic>=2.3.0",
+    "anthropic>=2.5.0",
     "beautifulsoup4>=4.15.0",
     "defusedxml>=0.7.1",
     "httpx>=0.28.1",
