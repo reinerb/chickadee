@@ -12,7 +12,7 @@ dependencies = [
     "httpx>=0.28.1",
     "markdown-it-py>=4.2.0",
     "pyairtable>=3.5.0.post1",
-    "pydantic>=2.14.1",
+    "pydantic>=2.14.2",
     "python-dotenv>=1.2.4",
     "soupsieve>=3.0.4",
 ]
