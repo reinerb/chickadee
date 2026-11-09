@@ -1,6 +1,7 @@
 import pytest
 
 from chickadee.config import parse_options
+from chickadee.errors import ConfigError
 
 
 def test_defaults_when_unset():
@@ -18,12 +19,12 @@ def test_empty_values_count_as_unset():
 
 
 def test_unknown_mode_is_rejected():
-    with pytest.raises(RuntimeError):
+    with pytest.raises(ConfigError):
         parse_options({"CHECK_LOG": "everything"})
 
 
 def test_zero_retention_is_rejected():
-    with pytest.raises(RuntimeError):
+    with pytest.raises(ConfigError):
         parse_options({"RETENTION_DAYS": "0"})
 
 
@@ -44,5 +45,5 @@ def test_ignore_selectors_are_trimmed():
 
 
 def test_invalid_selector_stops_at_startup():
-    with pytest.raises(SystemExit, match="IGNORE_SELECTORS"):
+    with pytest.raises(ConfigError, match="IGNORE_SELECTORS"):
         parse_options({"IGNORE_SELECTORS": ".related-posts,"})

@@ -1,4 +1,6 @@
 import argparse
+import logging
+import sys
 from typing import Protocol
 
 from chickadee import (
@@ -12,6 +14,7 @@ from chickadee import (
     prune,
     uptime,
 )
+from chickadee.errors import ChickadeeError
 
 
 class Command(Protocol):
@@ -53,6 +56,14 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: list[str] | None = None) -> None:
+def main(argv: list[str] | None = None) -> int:
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+
     args = build_parser().parse_args(argv)
-    args.run(args)
+
+    try:
+        args.run(args)
+    except ChickadeeError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    return 0

@@ -3,6 +3,7 @@ from pyairtable.api.types import RecordDict
 
 from chickadee import digest, reviewer
 from chickadee.digest import digest_system_prompt
+from chickadee.errors import ConfigError
 from chickadee.reviewer import Topic, build_system_prompt, review_version
 from chickadee.site_context import MAX_CONTEXT_CHARS, parse_site_context
 
@@ -34,13 +35,13 @@ def test_one_filled_row_among_empty_ones_is_fine():
 
 
 def test_two_contexts_stop_the_run():
-    with pytest.raises(SystemExit, match="2 rows"):
+    with pytest.raises(ConfigError, match="2 rows"):
         parse_site_context(site(CONTEXT, "Another site."))
 
 
 def test_context_has_a_length_limit():
     assert parse_site_context(site("x" * MAX_CONTEXT_CHARS)) is not None
-    with pytest.raises(SystemExit, match="2,001 characters"):
+    with pytest.raises(ConfigError, match="2,001 characters"):
         parse_site_context(site("x" * (MAX_CONTEXT_CHARS + 1)))
 
 

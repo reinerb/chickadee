@@ -6,6 +6,8 @@ from typing import Literal
 import soupsieve
 from dotenv import load_dotenv
 
+from chickadee.errors import ConfigError
+
 CheckLog = Literal["all", "changes"]
 
 
@@ -28,9 +30,9 @@ def _positive_int(env: Mapping[str, str], name: str, default: int) -> int:
     try:
         value = int(text)
     except ValueError:
-        raise RuntimeError(f"{name} must be a whole number, not {text!r}.") from None
+        raise ConfigError(f"{name} must be a whole number, not {text!r}.") from None
     if value < 1:
-        raise RuntimeError(f"{name} must be at least 1.")
+        raise ConfigError(f"{name} must be at least 1.")
     return value
 
 
@@ -43,7 +45,7 @@ def _selectors(env: Mapping[str, str], name: str) -> str | None:
     try:
         soupsieve.compile(value)
     except soupsieve.SelectorSyntaxError as exc:
-        raise SystemExit(f"{name} isn't a valid CSS selector: {exc}") from None
+        raise ConfigError(f"{name} isn't a valid CSS selector: {exc}") from None
 
     return value
 
@@ -55,17 +57,17 @@ def load_settings() -> Settings:
     base_id = os.getenv("AIRTABLE_BASE_ID")
 
     if not token:
-        raise RuntimeError(
+        raise ConfigError(
             "Missing AIRTABLE_TOKEN environment variable. Check your .env file."
         )
 
     if not base_id:
-        raise RuntimeError(
+        raise ConfigError(
             "Missing AIRTABLE_BASE_ID environment variable. Check your .env file."
         )
 
     if not base_id.startswith("app") or "/" in base_id:
-        raise RuntimeError(
+        raise ConfigError(
             f"AIRTABLE_BASE_ID looks wrong: {base_id!r}. It should be just the 'app...' part."
         )
 
@@ -79,7 +81,7 @@ def load_anthropic_key() -> str:
     load_dotenv()
     key = os.getenv("ANTHROPIC_API_KEY")
     if not key:
-        raise RuntimeError(
+        raise ConfigError(
             "Missing ANTHROPIC_API_KEY. Check your .env file or CI secrets."
         )
     return key
@@ -88,7 +90,7 @@ def load_anthropic_key() -> str:
 def parse_options(env: Mapping[str, str]) -> Options:
     check_log = env.get("CHECK_LOG") or "changes"
     if check_log not in ("all", "changes"):
-        raise RuntimeError(f"CHECK_LOG must be 'all' or 'changes', not {check_log!r}.")
+        raise ConfigError(f"CHECK_LOG must be 'all' or 'changes', not {check_log!r}.")
 
     return Options(
         check_log=check_log,
