@@ -1,7 +1,15 @@
 import httpx
 import pytest
 
-from chickadee.links import check_link, classify, redirected_home, wait_needed
+from chickadee.links import (
+    check_link,
+    classify,
+    links_on_page,
+    redirected_home,
+    wait_needed,
+)
+
+PAGE = '<main><a href="/one">One</a> <a href="https://other.org/two">Two</a></main>'
 
 
 def client_for(handler) -> httpx.Client:
@@ -84,3 +92,35 @@ def test_link_that_lands_on_the_homepage_is_unverified():
 
     assert (result.status, result.detail) == ("unverified", "redirects to homepage")
     assert (home.status, home.detail) == ("ok", "200")
+
+
+def test_links_come_from_the_page():
+    client = client_for(lambda request: httpx.Response(200, html=PAGE))
+
+    links = links_on_page(client, "https://example.org/post", ignore=None)
+
+    assert links == ["https://example.org/one", "https://other.org/two"]
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        httpx.Response(404, html=PAGE),
+        httpx.Response(500, html=PAGE),
+        httpx.Response(200, json={"links": ["/one"]}),
+    ],
+    ids=["missing", "server-error", "not-html"],
+)
+def test_unreadable_pages_are_skipped(response: httpx.Response):
+    client = client_for(lambda request: response)
+
+    assert links_on_page(client, "https://example.org/post", ignore=None) is None
+
+
+def test_unreachable_pages_are_skipped():
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("refused", request=request)
+
+    client = client_for(handler)
+
+    assert links_on_page(client, "https://example.org/post", ignore=None) is None
