@@ -62,6 +62,26 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     pass
 
 
+def links_on_page(
+    client: httpx.Client, url: str, *, ignore: str | None
+) -> list[str] | None:
+    """The links in a page's main content, or None if it can't be read."""
+    try:
+        response = client.get(url)
+    except httpx.RequestError as exc:
+        print(f"SKIP {url}: {type(exc).__name__}")
+        return None
+
+    if not response.is_success or "text/html" not in response.headers.get(
+        "content-type", ""
+    ):
+        print(f"SKIP {url}: status {response.status_code}")
+        return None
+
+    links = extract_links(response.text, str(response.url), ignore=ignore)
+    return links[:MAX_LINKS_PER_PAGE]
+
+
 def run(args: argparse.Namespace) -> None:
     settings = load_settings()
     options = load_options()
@@ -74,24 +94,12 @@ def run(args: argparse.Namespace) -> None:
 
     with make_client() as client:
         for record in records:
-            url = record["fields"]["URL"]
             time.sleep(1)
-
-            try:
-                response = client.get(url)
-            except httpx.RequestError as exc:
-                print(f"SKIP {url}: {type(exc).__name__}")
-                continue
-
-            if not response.is_success or "text/html" not in response.headers.get(
-                "content-type", ""
-            ):
-                print(f"SKIP {url}: status {response.status_code}")
-
-            links = extract_links(
-                response.text, str(response.url), ignore=options.ignore_selectors
+            links = links_on_page(
+                client, record["fields"]["URL"], ignore=options.ignore_selectors
             )
-            page_links[record["id"]] = links[:MAX_LINKS_PER_PAGE]
+            if links is not None:
+                page_links[record["id"]] = links
 
         unique = list(
             dict.fromkeys(link for links in page_links.values() for link in links)
