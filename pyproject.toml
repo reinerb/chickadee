@@ -34,3 +34,7 @@ ignore = ["E501"]
 [tool.pyright]
 include = ["src", "tests"]
 typeCheckingMode = "standard"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["--import-mode=importlib", "--strict-markers", "-ra"]
