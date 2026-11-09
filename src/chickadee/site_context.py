@@ -3,6 +3,8 @@ from collections.abc import Sequence
 from pyairtable import Api
 from pyairtable.api.types import RecordDict
 
+from chickadee.errors import ConfigError
+
 MAX_CONTEXT_CHARS = 2000
 
 
@@ -15,13 +17,13 @@ def parse_site_context(records: Sequence[RecordDict]) -> str | None:
     if not texts:
         return None
     if len(texts) > 1:
-        raise SystemExit(
+        raise ConfigError(
             f"The Site table has {len(texts)} rows with Context filled in. "
             "Keep it to one."
         )
     context = texts[0]
     if len(context) > MAX_CONTEXT_CHARS:
-        raise SystemExit(
+        raise ConfigError(
             f"The site context is {len(context):,} characters. "
             f"Keep it under {MAX_CONTEXT_CHARS:,}: it's sent with every review."
         )
