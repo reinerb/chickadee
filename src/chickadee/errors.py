@@ -3,8 +3,6 @@ class ChickadeeError(Exception):
     Raise it anywhere. Only `cli.main` turns it into an exit code.
     """
 
-    pass
-
 
 class ConfigError(ChickadeeError):
     pass
