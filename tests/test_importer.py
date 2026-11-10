@@ -1,6 +1,8 @@
+from datetime import UTC, datetime
+
 import pytest
 
-from chickadee.importer import plan_import, url_key
+from chickadee.importer import new_page_fields, plan_import, url_key
 
 SITEMAP = [
     "https://example.org/research/a/",
@@ -77,3 +79,19 @@ def test_plan_matches_urls_written_differently():
 
     assert plan.to_add == ("https://example.org/new/",)
     assert plan.no_longer_listed == ("https://example.org/gone/",)
+
+
+def test_new_pages_keep_the_sitemap_lastmod():
+    lastmod = datetime(2026, 3, 1, 9, 30, tzinfo=UTC)
+
+    assert new_page_fields("https://example.org/post", lastmod) == {
+        "URL": "https://example.org/post",
+        "Active": True,
+        "Sitemap lastmod": "2026-03-01T09:30:00+00:00",
+    }
+
+
+def test_new_pages_without_a_lastmod_leave_it_empty():
+    fields = new_page_fields("https://example.org/post", None)
+
+    assert "Sitemap lastmod" not in fields
