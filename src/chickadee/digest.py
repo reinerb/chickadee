@@ -1,18 +1,19 @@
-import sys
+import logging
 from collections import Counter
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, Protocol
 
 from anthropic import Anthropic, APIError
 from markdown_it import MarkdownIt
-from pyairtable.api.types import RecordDict
 
-from chickadee.config import load_anthropic_key
 from chickadee.flags import ALL_FLAGS
-from chickadee.history import Event, describe_duration
+from chickadee.history import Event, describe_duration, find_events, latest_status
+from chickadee.models import Check, Flag, Page
 from chickadee.site_context import with_context
+
+log = logging.getLogger(__name__)
 
 MODEL = "claude-haiku-5-5"
 MAX_ATTENTION = 10
@@ -41,31 +42,21 @@ class PageItem:
     url: str
     when: datetime | None
     summary: str | None
-    flags: tuple[str, ...]
-
-
-def _time(value: Any) -> datetime | None:
-    if isinstance(value, str) and value:
-        return datetime.fromisoformat(value)
-    return None
+    flags: tuple[Flag, ...]
 
 
 def _day(moment: datetime) -> str:
     return f"{moment:%b} {moment.day}"
 
 
-def page_item(record: RecordDict, when: datetime | None = None) -> PageItem:
-    fields = record["fields"]
-    url = fields.get("URL") or ""
-    content_hash = fields.get("Content hash")
-    reviewed = bool(content_hash) and fields.get("Reviewed hash") == content_hash
-    raised = set(fields.get("Attention") or [])
+def page_item(page: Page, when: datetime | None = None) -> PageItem:
+    reviewed = bool(page.content_hash) and page.reviewed_hash == page.content_hash
     return PageItem(
-        name=fields.get("Name") or url or "(unnamed page)",
-        url=url,
+        name=page.label,
+        url=page.url,
         when=when,
-        summary=fields.get("Content summary") if reviewed else None,
-        flags=tuple(flag for flag in ALL_FLAGS if flag in raised),
+        summary=page.content_summary if reviewed else None,
+        flags=tuple(flag for flag in ALL_FLAGS if flag in page.attention),
     )
 
 
@@ -78,51 +69,49 @@ def digest_html(markdown_text: str) -> str:
     return EMAIL_WRAPPER.format(body=body)
 
 
-def new_pages(active: Sequence[RecordDict], since: datetime) -> list[PageItem]:
-    items = []
-    for record in active:
-        created = datetime.fromisoformat(record["createdTime"])
-        if created >= since:
-            items.append(page_item(record, created))
+def new_pages(active: Sequence[Page], since: datetime) -> list[PageItem]:
+    items = [
+        page_item(page, page.created_at) for page in active if page.created_at >= since
+    ]
     return sorted(items, key=lambda item: item.when or since)
 
 
-def changed_pages(active: Sequence[RecordDict], since: datetime) -> list[PageItem]:
-    items = []
-    for record in active:
-        changed = _time(record["fields"].get("Content changed at"))
-        created = datetime.fromisoformat(record["createdTime"])
-        if changed is not None and changed >= since and created < since:
-            items.append(page_item(record, changed))
+def changed_pages(active: Sequence[Page], since: datetime) -> list[PageItem]:
+    items = [
+        page_item(page, page.content_changed_at)
+        for page in active
+        if page.content_changed_at is not None
+        and page.content_changed_at >= since
+        and page.created_at < since
+    ]
     return sorted(items, key=lambda item: item.when or since)
 
 
 def needs_attention(
-    active: Sequence[RecordDict],
-) -> tuple[list[PageItem], Counter[str]]:
+    active: Sequence[Page],
+) -> tuple[list[PageItem], Counter[Flag]]:
     flagged = [item for item in map(page_item, active) if item.flags]
     flagged.sort(key=lambda item: (-len(item.flags), item.name.casefold()))
-    counts: Counter[str] = Counter(flag for item in flagged for flag in item.flags)
+    counts: Counter[Flag] = Counter(flag for item in flagged for flag in item.flags)
     return flagged, counts
 
 
 def uptime_lines(
-    active: Sequence[RecordDict],
+    active: Sequence[Page],
     events: Sequence[Event],
     names: Mapping[str, str],
     now: datetime,
 ) -> tuple[list[str], list[str]]:
-    down = []
-    for record in active:
-        fields = record["fields"]
-        if fields.get("Status") != "Down":
+    down: list[str] = []
+    for page in active:
+        if page.status != "Down":
             continue
-        since = _time(fields.get("Status since"))
+        since = page.status_since
         duration = f" for {describe_duration(since, now)}" if since else ""
-        code = fields.get("Last status code") or "no response"
-        down.append(f"{page_item(record).name}: down{duration} ({code})")
+        code = page.last_status_code or "no response"
+        down.append(f"{page.label}: down{duration} ({code})")
 
-    happened = []
+    happened: list[str] = []
     for event in events:
         name = names.get(event.page_id, "(unknown page)")
         if event.status == "Up":
@@ -153,7 +142,7 @@ def render_digest(
     new: Sequence[PageItem],
     changed: Sequence[PageItem],
     flagged: Sequence[PageItem],
-    flag_counts: Mapping[str, int],
+    flag_counts: Mapping[Flag, int],
     down: Sequence[str],
     events: Sequence[str],
     limit: int = MAX_ATTENTION,
@@ -220,8 +209,7 @@ def claude_input(
     )
 
 
-def write_overview(content: str, system: str) -> str | None:
-    client = Anthropic(api_key=load_anthropic_key())
+def write_overview(client: Anthropic, content: str, system: str) -> str | None:
     try:
         message = client.messages.create(
             model=MODEL,
@@ -230,12 +218,14 @@ def write_overview(content: str, system: str) -> str | None:
             messages=[{"role": "user", "content": content}],
         )
     except APIError as exc:
-        print(f"Overview skipped: {type(exc).__name__}", file=sys.stderr)
+        log.warning("Overview skipped: %s", type(exc).__name__)
         return None
 
-    print(
-        f"[{MODEL}: {message.usage.input_tokens} in / {message.usage.output_tokens} out tokens]",
-        file=sys.stderr,
+    log.info(
+        "[%s: %d in / %d out tokens]",
+        MODEL,
+        message.usage.input_tokens,
+        message.usage.output_tokens,
     )
     text = "".join(
         block.text for block in message.content if block.type == "text"
@@ -268,3 +258,89 @@ def build_digest_payload(
         "down_now": down,
         "test": test,
     }
+
+
+class DigestPages(Protocol):
+    """Every page, active or not: past outages can name inactive pages."""
+
+    def all(self) -> list[Page]: ...
+
+
+class DigestChecks(Protocol):
+    def since(self, start: datetime) -> list[Check]: ...
+
+    def newest_before(self, cutoff: datetime) -> Iterable[Check]: ...
+
+
+@dataclass(frozen=True)
+class Digest:
+    markdown: str
+    since: datetime
+    until: datetime
+    new: int
+    changed: int
+    needs_attention: int
+    down: int
+
+    def payload(self, *, test: bool = False) -> dict[str, Any]:
+        return build_digest_payload(
+            markdown_text=self.markdown,
+            since=self.since,
+            until=self.until,
+            new=self.new,
+            changed=self.changed,
+            needs_attention=self.needs_attention,
+            down=self.down,
+            test=test,
+        )
+
+
+def build_digest(
+    pages: DigestPages,
+    checks: DigestChecks,
+    *,
+    since: datetime,
+    until: datetime,
+    overview: Callable[[str], str | None] | None = None,
+) -> Digest:
+    """Write the digest for the week from `since` to `until`.
+
+    `overview` gets Claude's input and returns the opening paragraph, or
+    None to leave it out.
+    """
+    all_pages = pages.all()
+    active = [page for page in all_pages if page.active]
+    names = {page.id: page.label for page in all_pages}
+
+    initial = latest_status(checks.newest_before(since), {page.id for page in active})
+    events = find_events(checks.since(since), initial)
+
+    new = new_pages(active, since)
+    changed = changed_pages(active, since)
+    flagged, flag_counts = needs_attention(active)
+    down, happened = uptime_lines(active, events, names, until)
+
+    opening = None
+    if overview is not None:
+        opening = overview(claude_input(new, changed, flagged, down, happened))
+
+    markdown = render_digest(
+        since=since,
+        until=until,
+        overview=opening,
+        new=new,
+        changed=changed,
+        flagged=flagged,
+        flag_counts=flag_counts,
+        down=down,
+        events=happened,
+    )
+    return Digest(
+        markdown,
+        since,
+        until,
+        new=len(new),
+        changed=len(changed),
+        needs_attention=len(flagged),
+        down=len(down),
+    )
