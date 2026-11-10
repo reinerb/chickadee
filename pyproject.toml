@@ -28,7 +28,7 @@ build-backend = "uv_build"
 dev = ["pyright>=1.1.414", "pytest>=9.2.0", "ruff>=0.17.3"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM"]
+select = ["E", "F", "I", "UP", "B", "SIM", "C4", "PIE", "PT", "RUF", "DTZ"]
 ignore = ["E501"]
 
 [tool.pyright]
