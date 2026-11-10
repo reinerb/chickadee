@@ -1,11 +1,10 @@
-from collections.abc import Mapping, Sequence
+from collections import Counter
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Protocol
 
-from pyairtable.api.types import RecordDict
-
-from chickadee.models import Flag
+from chickadee.models import Flag, Page
 
 LOW_SCORE = 4
 
@@ -27,78 +26,62 @@ ALL_FLAGS: tuple[Flag, ...] = (
 
 
 @dataclass(frozen=True)
-class PageFacts:
-    audited: bool
-    down: bool
-    broken_links: int
-    seo_score: int | None
-    has_title: bool
-    has_description: bool
-    key_point_buried: bool
-    last_updated: datetime
+class FlagsReport:
+    updated: int
+    counts: Counter[Flag]
 
 
-def _parse_time(value: Any) -> datetime | None:
-    if isinstance(value, str) and value:
-        return datetime.fromisoformat(value)
+class FlagPages(Protocol):
+    """What run_flags needs from wherever pages are kept."""
 
-    return None
+    def active(self) -> Iterable[Page]: ...
+
+    def save_flags(self, flags: Mapping[str, Sequence[Flag]]) -> None: ...
 
 
-def last_updated(record: RecordDict) -> datetime:
-    fields = record["fields"]
+def last_updated(page: Page) -> datetime:
     observed = [
         moment
-        for moment in (
-            _parse_time(fields.get("Page modified at")),
-            _parse_time(fields.get("Content changed at")),
-        )
+        for moment in (page.page_modified_at, page.content_changed_at)
         if moment is not None
     ]
     if observed:
         return max(observed)
-    return _parse_time(fields.get("Sitemap lastmod")) or datetime.fromisoformat(
-        record["createdTime"]
-    )
+    return page.sitemap_lastmod or page.created_at
 
 
-def facts_from_record(record: RecordDict) -> PageFacts:
-    fields = record["fields"]
-    return PageFacts(
-        audited=bool(fields.get("Content hash")),
-        down=fields.get("Status") == "Down",
-        broken_links=fields.get("Broken link count") or 0,
-        seo_score=fields.get("SEO score"),
-        has_title=bool(fields.get("Current title")),
-        has_description=bool(fields.get("Current description")),
-        key_point_buried=fields.get("Key point up front") == "No",
-        last_updated=last_updated(record),
-    )
-
-
-def find_flags(facts: PageFacts, now: datetime, stale_after: timedelta) -> list[str]:
-    flags: list[str] = []
-    if facts.down:
+def find_flags(page: Page, now: datetime, stale_after: timedelta) -> list[Flag]:
+    flags: list[Flag] = []
+    if page.status == "Down":
         flags.append(DOWN)
-    if facts.broken_links > 0:
+    if (page.broken_link_count or 0) > 0:
         flags.append(BROKEN_LINKS)
-    if now - facts.last_updated > stale_after:
+    if now - last_updated(page) > stale_after:
         flags.append(STALE)
-    if facts.seo_score is not None and facts.seo_score <= LOW_SCORE:
+    if page.seo_score is not None and page.seo_score <= LOW_SCORE:
         flags.append(LOW_SCORE_FLAG)
-    if facts.audited and not (facts.has_title and facts.has_description):
+    if page.content_hash and not (page.current_title and page.current_description):
         flags.append(MISSING_METADATA)
-    if facts.key_point_buried:
+    if page.key_point_up_front is False:
         flags.append(KEY_POINT_BURIED)
     return flags
 
 
-def flag_update(
-    fields: Mapping[str, Any], flags: Sequence[str]
-) -> dict[str, Any] | None:
-    unchanged = set(fields.get("Attention") or []) == set(flags) and fields.get(
-        "Attention count"
-    ) == len(flags)
-    if unchanged:
-        return None
-    return {"Attention": list(flags), "Attention count": len(flags)}
+def flags_changed(page: Page, flags: Sequence[Flag]) -> bool:
+    return set(page.attention) != set(flags) or page.attention_count != len(flags)
+
+
+def run_flags(
+    pages: FlagPages, *, now: datetime, stale_after: timedelta
+) -> FlagsReport:
+    changes: dict[str, list[Flag]] = {}
+    counts: Counter[Flag] = Counter()
+
+    for page in pages.active():
+        flags = find_flags(page, now, stale_after)
+        counts.update(flags)
+        if flags_changed(page, flags):
+            changes[page.id] = flags
+
+    pages.save_flags(changes)
+    return FlagsReport(updated=len(changes), counts=counts)
