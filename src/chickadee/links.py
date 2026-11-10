@@ -7,11 +7,11 @@ import httpx
 from pyairtable import Api
 from pyairtable.api.types import UpdateRecordDict
 
+from chickadee.airtable import to_link_fields
 from chickadee.checker import make_client
 from chickadee.config import load_options, load_settings
 from chickadee.extractor import extract_links
 from chickadee.results import LinkResult, LinkStatus
-from chickadee.store import to_link_fields
 
 HELP = "Check the links in each page's main content."
 

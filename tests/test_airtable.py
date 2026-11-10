@@ -3,11 +3,7 @@ from typing import Any
 
 import pytest
 
-from chickadee.checker import CheckResult
-from chickadee.extractor import PageContent, content_hash
-from chickadee.results import LinkResult
-from chickadee.reviewer import PageReview
-from chickadee.store import (
+from chickadee.airtable import (
     classify_change,
     match_topics,
     review_state,
@@ -18,6 +14,10 @@ from chickadee.store import (
     to_review_fields,
     to_status_fields,
 )
+from chickadee.checker import CheckResult
+from chickadee.extractor import PageContent, content_hash
+from chickadee.results import LinkResult
+from chickadee.reviewer import PageReview
 
 CHECKED_AT = datetime(2026, 10, 24, 12, 0, tzinfo=UTC)
 CONTENT = PageContent(
