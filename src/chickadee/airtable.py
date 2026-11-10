@@ -2,12 +2,66 @@ from collections.abc import Container, Sequence
 from datetime import UTC, datetime
 from typing import Any
 
-from pyairtable.api.types import UpdateRecordDict
+from pyairtable.api.types import RecordDict, UpdateRecordDict
 
 from chickadee.checker import CheckResult, status_of
 from chickadee.extractor import ContentChange, PageContent
-from chickadee.results import LinkResult
+from chickadee.models import LinkResult, Page
 from chickadee.reviewer import PageReview
+
+# Page attribute -> Pages column. To read a new column, add a field
+# to models.Page and a line here.
+PAGE_COLUMNS = {
+    "url": "URL",
+    "name": "Name",
+    "active": "Active",
+    "sitemap_lastmod": "Sitemap lastmod",
+    "status": "Status",
+    "status_since": "Status since",
+    "last_checked": "Last checked",
+    "last_status_code": "Last status code",
+    "last_response_time_ms": "Last response time (ms)",
+    "alerted_status": "Alerted status",
+    "current_title": "Current title",
+    "current_description": "Current description",
+    "word_count": "Word count",
+    "page_modified_at": "Page modified at",
+    "content_hash": "Content hash",
+    "content_changed_at": "Content changed at",
+    "content_summary": "Content summary",
+    "key_point": "Key point",
+    "key_point_up_front": "Key point up front",
+    "topic_ids": "Topics",
+    "seo_score": "SEO score",
+    "seo_summary": "SEO summary",
+    "suggested_title": "Suggested title",
+    "suggested_description": "Suggested description",
+    "seo_issues": "SEO issues",
+    "last_audited": "Last audited",
+    "reviewed_hash": "Reviewed hash",
+    "review_version": "Review version",
+    "broken_links": "Broken links",
+    "unverified_links": "Unverified links",
+    "broken_link_count": "Broken link count",
+    "links_checked_at": "Links checked at",
+    "attention": "Attention",
+    "attention_count": "Attention count",
+}
+
+
+def page_from_record(record: RecordDict) -> Page:
+    fields = record["fields"]
+    return Page.model_validate(
+        {
+            "id": record["id"],
+            "created_at": record["createdTime"],
+            **{
+                attr: fields[column]
+                for attr, column in PAGE_COLUMNS.items()
+                if column in fields
+            },
+        }
+    )
 
 
 def _stamp(moment: datetime) -> str:
