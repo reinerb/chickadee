@@ -5,16 +5,15 @@ from datetime import UTC, datetime
 from pyairtable import Api
 from pyairtable.api.types import UpdateRecordDict
 
-from chickadee.airtable import should_log, to_check_fields, to_status_fields
+from chickadee.airtable import to_check_fields, to_status_fields
 from chickadee.alerts import (
     PendingAlert,
     build_alert,
     decide_alert,
     deliver_alerts,
     down_since,
-    status_of,
 )
-from chickadee.checker import check_pages, make_client
+from chickadee.checker import check_pages, make_client, should_log, status_of
 from chickadee.config import load_alert_webhook, load_options, load_settings
 
 HELP = "Check that every active page is up, and send alerts for changes."

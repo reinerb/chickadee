@@ -9,15 +9,16 @@ from anthropic.types.messages.batch_create_params import Request
 from pyairtable import Api
 from pyairtable.api.types import UpdateRecordDict
 
-from chickadee.airtable import classify_change, review_state, to_content_fields
+from chickadee.airtable import to_content_fields
 from chickadee.checker import make_client
 from chickadee.config import load_anthropic_key, load_options, load_settings
-from chickadee.extractor import content_hash, extract_content
+from chickadee.extractor import classify_change, content_hash, extract_content
 from chickadee.reviewer import (
     Topic,
     build_review_request,
     build_system_prompt,
     review_schema,
+    review_state,
     review_version,
 )
 from chickadee.site_context import load_site_context
