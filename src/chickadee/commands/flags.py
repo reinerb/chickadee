@@ -15,7 +15,7 @@ def run(args: argparse.Namespace, app: App) -> None:
     report = run_flags(
         app.pages,
         now=datetime.now(UTC),
-        stale_after=timedelta(days=app.options.stale_after_days),
+        stale_after=timedelta(days=app.settings.stale_after_days),
     )
 
     print(f"Updated flags on {report.updated} pages.")

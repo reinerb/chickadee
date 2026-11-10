@@ -1,6 +1,6 @@
 import os
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
 import soupsieve
@@ -13,20 +13,56 @@ CheckLog = Literal["all", "changes"]
 
 @dataclass(frozen=True)
 class Settings:
-    airtable_token: str
-    airtable_base_id: str
+    """Everything Chickadee reads from the environment or a .env file.
 
+    Values are checked when they're read, but none is required until a
+    command uses it (see `required`), so `test-alert` works without any
+    Airtable credentials. Secrets are left out of the repr, so printing
+    or logging the settings can't reveal them.
+    """
 
-@dataclass(frozen=True)
-class Options:
-    check_log: CheckLog
-    retention_days: int
-    stale_after_days: int
+    airtable_token: str | None = field(default=None, repr=False)
+    airtable_base_id: str | None = None
+    anthropic_api_key: str | None = field(default=None, repr=False)
+    alert_webhook_url: str | None = field(default=None, repr=False)
+    digest_webhook_url: str | None = field(default=None, repr=False)
+    check_log: CheckLog = "changes"
+    retention_days: int = 90
+    stale_after_days: int = 365
     ignore_selectors: str | None = None
 
 
+def required(value: str | None, name: str) -> str:
+    """The value a command needs, or a clear error saying which one is missing."""
+    if not value:
+        raise ConfigError(
+            f"Missing {name} environment variable. Check your .env file or CI secrets."
+        )
+    return value
+
+
+def _text(env: Mapping[str, str], name: str) -> str | None:
+    return env.get(name, "").strip() or None
+
+
+def _base_id(env: Mapping[str, str]) -> str | None:
+    base_id = _text(env, "AIRTABLE_BASE_ID")
+    if base_id is not None and (not base_id.startswith("app") or "/" in base_id):
+        raise ConfigError(
+            f"AIRTABLE_BASE_ID looks wrong: {base_id!r}. It should be just the 'app...' part."
+        )
+    return base_id
+
+
+def _check_log(env: Mapping[str, str]) -> CheckLog:
+    check_log = _text(env, "CHECK_LOG") or "changes"
+    if check_log not in ("all", "changes"):
+        raise ConfigError(f"CHECK_LOG must be 'all' or 'changes', not {check_log!r}.")
+    return check_log
+
+
 def _positive_int(env: Mapping[str, str], name: str, default: int) -> int:
-    text = env.get(name) or str(default)
+    text = _text(env, name) or str(default)
     try:
         value = int(text)
     except ValueError:
@@ -37,9 +73,8 @@ def _positive_int(env: Mapping[str, str], name: str, default: int) -> int:
 
 
 def _selectors(env: Mapping[str, str], name: str) -> str | None:
-    value = env.get(name, "").strip()
-
-    if not value:
+    value = _text(env, name)
+    if value is None:
         return None
 
     try:
@@ -50,66 +85,21 @@ def _selectors(env: Mapping[str, str], name: str) -> str | None:
     return value
 
 
-def load_settings() -> Settings:
-    load_dotenv()
-
-    token = os.getenv("AIRTABLE_TOKEN")
-    base_id = os.getenv("AIRTABLE_BASE_ID")
-
-    if not token:
-        raise ConfigError(
-            "Missing AIRTABLE_TOKEN environment variable. Check your .env file."
-        )
-
-    if not base_id:
-        raise ConfigError(
-            "Missing AIRTABLE_BASE_ID environment variable. Check your .env file."
-        )
-
-    if not base_id.startswith("app") or "/" in base_id:
-        raise ConfigError(
-            f"AIRTABLE_BASE_ID looks wrong: {base_id!r}. It should be just the 'app...' part."
-        )
-
+def parse_settings(env: Mapping[str, str]) -> Settings:
     return Settings(
-        airtable_token=token,
-        airtable_base_id=base_id,
-    )
-
-
-def load_anthropic_key() -> str:
-    load_dotenv()
-    key = os.getenv("ANTHROPIC_API_KEY")
-    if not key:
-        raise ConfigError(
-            "Missing ANTHROPIC_API_KEY. Check your .env file or CI secrets."
-        )
-    return key
-
-
-def parse_options(env: Mapping[str, str]) -> Options:
-    check_log = env.get("CHECK_LOG") or "changes"
-    if check_log not in ("all", "changes"):
-        raise ConfigError(f"CHECK_LOG must be 'all' or 'changes', not {check_log!r}.")
-
-    return Options(
-        check_log=check_log,
+        airtable_token=_text(env, "AIRTABLE_TOKEN"),
+        airtable_base_id=_base_id(env),
+        anthropic_api_key=_text(env, "ANTHROPIC_API_KEY"),
+        alert_webhook_url=_text(env, "ALERT_WEBHOOK_URL"),
+        digest_webhook_url=_text(env, "DIGEST_WEBHOOK_URL"),
+        check_log=_check_log(env),
         retention_days=_positive_int(env, "RETENTION_DAYS", 90),
         stale_after_days=_positive_int(env, "STALE_AFTER_DAYS", 365),
         ignore_selectors=_selectors(env, "IGNORE_SELECTORS"),
     )
 
 
-def load_options() -> Options:
+def load_settings() -> Settings:
+    """Read the settings once: values already in the environment win over .env."""
     load_dotenv()
-    return parse_options(os.environ)
-
-
-def load_alert_webhook() -> str | None:
-    load_dotenv()
-    return os.getenv("ALERT_WEBHOOK_URL") or None
-
-
-def load_digest_webhook() -> str | None:
-    load_dotenv()
-    return os.getenv("DIGEST_WEBHOOK_URL") or None
+    return parse_settings(os.environ)

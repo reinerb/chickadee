@@ -16,13 +16,7 @@ from chickadee.airtable import (
 )
 from chickadee.checker import make_client
 from chickadee.claude import ClaudeBatches
-from chickadee.config import (
-    Options,
-    Settings,
-    load_anthropic_key,
-    load_options,
-    load_settings,
-)
+from chickadee.config import Settings, load_settings, required
 
 
 class App:
@@ -48,15 +42,14 @@ class App:
         self._stack.close()
 
     def _table(self, name: str) -> Table:
-        return self.airtable.table(self.settings.airtable_base_id, name)
+        api = self.airtable
+        return api.table(
+            required(self.settings.airtable_base_id, "AIRTABLE_BASE_ID"), name
+        )
 
     @cached_property
     def settings(self) -> Settings:
         return load_settings()
-
-    @cached_property
-    def options(self) -> Options:
-        return load_options()
 
     @cached_property
     def http(self) -> httpx.Client:
@@ -64,11 +57,12 @@ class App:
 
     @cached_property
     def airtable(self) -> Api:
-        return Api(self.settings.airtable_token)
+        return Api(required(self.settings.airtable_token, "AIRTABLE_TOKEN"))
 
     @cached_property
     def claude(self) -> Anthropic:
-        return self._stack.enter_context(Anthropic(api_key=load_anthropic_key()))
+        api_key = required(self.settings.anthropic_api_key, "ANTHROPIC_API_KEY")
+        return self._stack.enter_context(Anthropic(api_key=api_key))
 
     @cached_property
     def pages(self) -> AirtablePages:

@@ -29,7 +29,7 @@ def run(args: argparse.Namespace, app: App) -> None:
         app.pages,
         app.http,
         setup,
-        ignore=app.options.ignore_selectors,
+        ignore=app.settings.ignore_selectors,
         review_all=args.all,
         audited_at=audited_at,
     )

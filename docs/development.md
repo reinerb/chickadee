@@ -44,7 +44,7 @@ src/chickadee/
   __main__.py    lets python -m chickadee run the same command
   errors.py      ChickadeeError, the failures cli.py reports as a message instead of a traceback
   app.py         builds the settings, clients and tables commands use, and closes them afterwards
-  config.py      reads credentials and settings from the environment or .env
+  config.py      reads every setting once, from the environment or .env, and checks each one
   commands/      one module per subcommand: its help, arguments, and the run function that wires it up
     import, uptime, audit, collect, links, flags, digest, prune, test-alert
     _args.py     argument types shared by more than one command

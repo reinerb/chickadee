@@ -3,7 +3,6 @@ import sys
 from datetime import UTC, datetime, timedelta
 
 from chickadee.app import App
-from chickadee.config import load_digest_webhook
 from chickadee.digest import build_digest, digest_system_prompt, write_overview
 from chickadee.errors import ChickadeeError
 from chickadee.webhooks import post_json
@@ -45,7 +44,7 @@ def run(args: argparse.Namespace, app: App) -> None:
     if args.no_send:
         return
 
-    webhook_url = load_digest_webhook()
+    webhook_url = app.settings.digest_webhook_url
     if not webhook_url:
         print(
             "DIGEST_WEBHOOK_URL isn't set, so the digest wasn't emailed.",
