@@ -110,7 +110,11 @@ def collect_page_urls(
             continue
         visited.add(url)
 
-        entries = parse_sitemap(fetch_sitemap(client, url))
+        try:
+            entries = parse_sitemap(fetch_sitemap(client, url))
+        except SitemapError as exc:
+            raise SitemapError(f"{url}: {exc}") from exc
+
         for page in entries.pages:
             pages.setdefault(page, entries.lastmod.get(page))
         to_visit.extend(entries.sitemaps)
