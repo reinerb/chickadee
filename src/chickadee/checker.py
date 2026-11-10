@@ -43,7 +43,7 @@ def check_url(client: httpx.Client, url: str) -> CheckResult:
 def check_pages(
     client: httpx.Client,
     urls: Mapping[str, str],
-    retry_delay: float = 30.0,
+    retry_delay: float = RETRY_DELAY,
     sleep: Callable[[float], None] = time.sleep,
 ) -> dict[str, CheckResult]:
     results = {key: check_url(client, url) for key, url in urls.items()}

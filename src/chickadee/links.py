@@ -48,7 +48,7 @@ def check_link(client: httpx.Client, url: str) -> LinkResult:
     if status == "ok" and redirected_home(httpx.URL(url), final):
         return LinkResult(url, "unverified", "redirects to homepage")
 
-    return LinkResult(url, classify(code), str(code))
+    return LinkResult(url, status, str(code))
 
 
 def wait_needed(last_request: float | None, now: float, interval: float) -> float:

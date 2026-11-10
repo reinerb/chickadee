@@ -69,8 +69,8 @@ def run(args: argparse.Namespace) -> None:
                 down_since=down_since(
                     previous_status,
                     datetime.fromisoformat(since) if since else None,
-                    result.ok,
-                    checked_at,
+                    ok=result.ok,
+                    checked_at=checked_at,
                 ),
                 checked_at=checked_at,
             )

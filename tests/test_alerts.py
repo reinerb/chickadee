@@ -50,12 +50,12 @@ def test_alerts_follow_what_was_last_announced(alerted, status, action):
 
 def test_outage_start_is_known_only_when_it_can_be():
     # Still down, or recovering: the outage started when Status last changed.
-    assert down_since("Down", EARLIER, False, NOW) == EARLIER
-    assert down_since("Down", EARLIER, True, NOW) == EARLIER
+    assert down_since("Down", EARLIER, ok=False, checked_at=NOW) == EARLIER
+    assert down_since("Down", EARLIER, ok=True, checked_at=NOW) == EARLIER
     # Just went down: the outage starts now.
-    assert down_since("Up", EARLIER, False, NOW) == NOW
+    assert down_since("Up", EARLIER, ok=False, checked_at=NOW) == NOW
     # A retried recovery: Status since is when it came back up, not when it went down.
-    assert down_since("Up", EARLIER, True, NOW) is None
+    assert down_since("Up", EARLIER, ok=True, checked_at=NOW) is None
 
 
 # What alerts say
