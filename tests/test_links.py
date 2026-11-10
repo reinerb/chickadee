@@ -1,15 +1,48 @@
+from collections.abc import Mapping, Sequence
+from datetime import UTC, datetime
+
 import httpx
 import pytest
 
 from chickadee.links import (
+    LinksReport,
     check_link,
     classify,
     links_on_page,
     redirected_home,
+    run_links,
     wait_needed,
 )
+from chickadee.models import LinkResult, Page
 
 PAGE = '<main><a href="/one">One</a> <a href="https://other.org/two">Two</a></main>'
+NOW = datetime(2026, 11, 10, tzinfo=UTC)
+
+
+class FakePages:
+    def __init__(self, *pages: Page) -> None:
+        self.pages = pages
+        self.saved: dict[str, Sequence[LinkResult]] = {}
+        self.checked_at: datetime | None = None
+
+    def active(self) -> tuple[Page, ...]:
+        return self.pages
+
+    def save_links(
+        self, results: Mapping[str, Sequence[LinkResult]], checked_at: datetime
+    ) -> None:
+        self.saved = dict(results)
+        self.checked_at = checked_at
+
+
+def fake_site(request: httpx.Request) -> httpx.Response:
+    routes = {
+        "/post": httpx.Response(200, html=PAGE),
+        "/missing": httpx.Response(404, html='<main><a href="/never">x</a></main>'),
+        "/one": httpx.Response(200, html="fine"),
+        "/two": httpx.Response(404, html="gone"),
+    }
+    return routes[request.url.path]
 
 
 def client_for(handler) -> httpx.Client:
@@ -124,3 +157,28 @@ def test_unreachable_pages_are_skipped():
     client = client_for(handler)
 
     assert links_on_page(client, "https://example.org/post", ignore=None) is None
+
+
+def test_run_links_saves_results_for_readable_pages_only():
+    store = FakePages(
+        Page(id="recPost", created_at=NOW, url="https://example.org/post"),
+        Page(id="recMissing", created_at=NOW, url="https://example.org/missing"),
+    )
+    client = client_for(fake_site)
+
+    report = run_links(
+        store,
+        client,
+        ignore=None,
+        checked_at=NOW,
+        sleep=lambda seconds: None,
+    )
+
+    # The 404 page is skipped, not mined for links.
+    assert set(store.saved) == {"recPost"}
+    assert [(r.url, r.status) for r in store.saved["recPost"]] == [
+        ("https://example.org/one", "ok"),
+        ("https://other.org/two", "broken"),
+    ]
+    assert store.checked_at == NOW
+    assert report == LinksReport(pages=1, links=2, broken=1)
