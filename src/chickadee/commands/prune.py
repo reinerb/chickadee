@@ -21,7 +21,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 def run(args: argparse.Namespace, app: App) -> None:
-    days = args.days if args.days is not None else app.options.retention_days
+    days = args.days if args.days is not None else app.settings.retention_days
     cutoff = datetime.now(UTC) - timedelta(days=days)
 
     old = app.checks.ids_before(cutoff)

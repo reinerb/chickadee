@@ -2,7 +2,6 @@ import argparse
 from datetime import UTC, datetime
 
 from chickadee.app import App
-from chickadee.config import load_alert_webhook
 from chickadee.errors import ChickadeeError
 from chickadee.uptime import run_uptime, send_alerts
 
@@ -14,7 +13,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 def run(args: argparse.Namespace, app: App) -> None:
-    check_log = app.options.check_log
+    check_log = app.settings.check_log
     report = run_uptime(
         app.pages,
         app.checks,
@@ -29,7 +28,7 @@ def run(args: argparse.Namespace, app: App) -> None:
 
     if not report.alerts:
         return
-    webhook_url = load_alert_webhook()
+    webhook_url = app.settings.alert_webhook_url
     if not webhook_url:
         print(f"{len(report.alerts)} alert(s) due, but ALERT_WEBHOOK_URL isn't set.")
         return
