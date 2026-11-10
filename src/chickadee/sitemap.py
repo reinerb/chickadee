@@ -48,15 +48,20 @@ def fetch_sitemap(
     chunks: list[bytes] = []
     size = 0
 
-    with client.stream("GET", url) as response:
-        response.raise_for_status()
-        for chunk in response.iter_bytes():
-            size += len(chunk)
+    try:
+        with client.stream("GET", url) as response:
+            response.raise_for_status()
+            for chunk in response.iter_bytes():
+                size += len(chunk)
 
-            if size > limit:
-                raise SitemapError(f"{url} is larger than {limit:,} bytes")
+                if size > limit:
+                    raise SitemapError(f"{url} is larger than {limit:,} bytes")
 
-            chunks.append(chunk)
+                chunks.append(chunk)
+    except httpx.HTTPStatusError as exc:
+        raise SitemapError(f"{url}: HTTP {exc.response.status_code}") from exc
+    except httpx.HTTPError as exc:
+        raise SitemapError(f"{url}: {type(exc).__name__}") from exc
 
     try:
         return decompress(b"".join(chunks), limit)
