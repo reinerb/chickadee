@@ -43,7 +43,7 @@ src/chickadee/
   cli.py         the chickadee command: parses arguments and runs one subcommand
   __main__.py    lets python -m chickadee run the same command
   errors.py      ChickadeeError, the failures cli.py reports as a message instead of a traceback
-  app.py         builds the settings and clients commands use, and closes them afterwards
+  app.py         builds the settings, clients and tables commands use, and closes them afterwards
   config.py      reads credentials and settings from the environment or .env
   commands/      one module per subcommand: its help, arguments, and the run function that wires it up
     import, uptime, audit, collect, links, flags, digest, prune, test-alert
@@ -57,7 +57,7 @@ src/chickadee/
   reviewer.py    the review schema, prompt, topics, batch requests and validation, and what needs review
   flags.py       decides which pages need attention
   digest.py      builds the weekly digest and its email
-  airtable.py    turns results into Airtable fields and builds formulas for filtering checks by date
+  airtable.py    reads rows into models, turns results into Airtable fields, and builds formulas for filtering checks by date
   history.py     turns logged checks into outage and recovery events
   sitemap.py     reads sitemaps and sitemap indexes, including compressed ones and lastmod dates
   site_context.py  reads and checks the site context, and places it in prompts
