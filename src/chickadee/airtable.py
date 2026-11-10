@@ -1,7 +1,8 @@
-from collections.abc import Container, Sequence
+from collections.abc import Container, Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any
 
+from pyairtable import Table
 from pyairtable.api.types import RecordDict, UpdateRecordDict
 
 from chickadee.checker import CheckResult, status_of
@@ -62,6 +63,27 @@ def page_from_record(record: RecordDict) -> Page:
             },
         }
     )
+
+
+class AirtablePages:
+    """The Pages table, spoken to in Chickadee's own types."""
+
+    def __init__(self, table: Table) -> None:
+        self._table = table
+
+    def active(self) -> list[Page]:
+        records = self._table.all(formula="{Active}")
+        return [page_from_record(record) for record in records]
+
+    def save_links(
+        self, results: Mapping[str, Sequence[LinkResult]], checked_at: datetime
+    ) -> None:
+        updates: list[UpdateRecordDict] = [
+            {"id": page_id, "fields": to_link_fields(found, checked_at)}
+            for page_id, found in results.items()
+        ]
+        if updates:
+            self._table.batch_update(updates)
 
 
 def _stamp(moment: datetime) -> str:
