@@ -17,7 +17,7 @@ To add a dependency, use `uv add` (or `uv add --dev` for tools) and commit the u
 
 The tests cover the logic that decides things, and none of them touch the network, Airtable or Claude. They run in about a second, cost nothing, and run in CI without any credentials.
 
-That's possible because the code is split the same way throughout: small functions make the decisions, and a thin `run` function in each command fetches data, calls them, and saves the results. The decisions are what get tested:
+That's possible because the code is split the same way throughout: small functions make the decisions, and a thin `run` function in each module under `commands/` fetches data, calls them, and saves the results. The decisions are what get tested:
 
 - **Uptime and alerts:** reading settings, retrying failed checks, deciding what gets logged and when to alert, working out when an outage started, building alert payloads and tracking which were delivered, turning a log into outage and recovery events.
 - **Content:** pulling text, links and dates out of HTML, ignoring configured sections, fingerprinting it, deciding what needs a review and why.
@@ -69,7 +69,7 @@ src/chickadee/
 
 ## Adding a command
 
-Every command module has the same three things:
+Every module in `commands/` has the same three things:
 
 ```python
 HELP = "One line describing the command."
@@ -82,6 +82,6 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
 def run(args: argparse.Namespace) -> None: ...
 ```
 
-To add one, write the module and add it to `COMMANDS` in `cli.py`. A `Protocol` in `cli.py` describes this shape, so Pyright checks every command module has all three. `tests/test_cli.py` checks that every command's `--help` works.
+To add one, write the module in `commands/` and add it to `COMMANDS` in `cli.py`. Keep it thin: decisions go in a module outside `commands/`, where they can be tested without Airtable or the network. A `Protocol` in `cli.py` describes this shape, so Pyright checks every command module has all three. `tests/test_cli.py` checks that every command's `--help` works.
 
 Commands that print a report send messages about the run to stderr and the report itself to stdout, so the output can be redirected or written into a GitHub run summary without picking up noise.
