@@ -53,7 +53,7 @@ src/chickadee/
   uptime.py      checks every page, records its status and decides which alerts to send
   checker.py     the shared HTTP client, single-page check, the retry for failed checks, and what gets logged
   extractor.py   pulls the title, description, dates, headings, text and links from HTML, and fingerprints it
-  importer.py    matches URLs that are written differently and decides which sitemap pages to add
+  importer.py    matches URLs that are written differently, decides which sitemap pages to add, and adds them
   links.py       checks links and paces requests to each site
   reviewer.py    the review schema, prompt, topics, batch requests and validation, and what needs review
   flags.py       decides which pages need attention
