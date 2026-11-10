@@ -6,6 +6,7 @@ from datetime import datetime
 import httpx
 from defusedxml.ElementTree import fromstring
 
+from chickadee.errors import ChickadeeError
 from chickadee.extractor import parse_page_date
 
 NS = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
@@ -21,7 +22,7 @@ class SitemapEntries:
     lastmod: dict[str, datetime] = field(default_factory=dict)
 
 
-class SitemapError(Exception):
+class SitemapError(ChickadeeError):
     pass
 
 
