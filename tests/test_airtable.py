@@ -14,6 +14,7 @@ from chickadee.airtable import (
     to_content_fields,
     to_flag_fields,
     to_link_fields,
+    to_new_page_fields,
     to_review_fields,
     to_status_fields,
 )
@@ -272,3 +273,19 @@ def test_flag_fields_store_the_flags_and_their_count():
         "Attention count": 2,
     }
     assert to_flag_fields([]) == {"Attention": [], "Attention count": 0}
+
+
+def test_new_pages_keep_the_sitemap_lastmod():
+    lastmod = datetime(2026, 3, 1, 9, 30, tzinfo=UTC)
+
+    assert to_new_page_fields("https://example.org/post", lastmod) == {
+        "URL": "https://example.org/post",
+        "Active": True,
+        "Sitemap lastmod": "2026-03-01T09:30:00+00:00",
+    }
+
+
+def test_new_pages_without_a_lastmod_leave_it_empty():
+    fields = to_new_page_fields("https://example.org/post", None)
+
+    assert "Sitemap lastmod" not in fields
