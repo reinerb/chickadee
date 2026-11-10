@@ -1,14 +1,17 @@
-from collections.abc import Container, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any
 
 from pyairtable import Table
 from pyairtable.api.types import RecordDict, UpdateRecordDict
 
+from chickadee.audit import ContentUpdate
 from chickadee.checker import CheckResult, status_of
+from chickadee.collect import PendingBatch, SavedReview
 from chickadee.extractor import ContentChange, PageContent
 from chickadee.models import Flag, LinkResult, Page, Status
-from chickadee.reviewer import PageReview
+from chickadee.reviewer import PageReview, Topic
+from chickadee.site_context import parse_site_context
 from chickadee.uptime import StatusUpdate
 
 # Page attribute -> Pages column. To read a new column, add a field
@@ -112,6 +115,48 @@ class AirtablePages:
         if records:
             self._table.batch_update(records)
 
+    def ids(self) -> set[str]:
+        """Every page's record ID, including inactive pages."""
+        return {record["id"] for record in self._table.all(fields=["URL"])}
+
+    def save_content(
+        self, updates: Sequence[ContentUpdate], audited_at: datetime
+    ) -> None:
+        records: list[UpdateRecordDict] = [
+            {
+                "id": update.page_id,
+                "fields": to_content_fields(
+                    update.content,
+                    update.content_hash,
+                    update.change,
+                    audited_at,
+                    review_version=update.review_version,
+                ),
+            }
+            for update in updates
+        ]
+        if records:
+            self._table.batch_update(records)
+
+    def save_reviews(
+        self, reviews: Sequence[SavedReview], reviewed_at: datetime
+    ) -> None:
+        records: list[UpdateRecordDict] = [
+            {
+                "id": review.page_id,
+                "fields": to_review_fields(
+                    review.review,
+                    reviewed_at,
+                    review.reviewed_hash,
+                    review.version,
+                    review.topic_ids,
+                ),
+            }
+            for review in reviews
+        ]
+        if records:
+            self._table.batch_update(records)
+
     def tracked_urls(self) -> set[str]:
         """Every page's URL, including inactive pages."""
         return {
@@ -158,6 +203,63 @@ class AirtableChecks:
             self._table.batch_delete(ids)
 
 
+class AirtableTopics:
+    """The Topics table, which you manage."""
+
+    def __init__(self, table: Table) -> None:
+        self._table = table
+
+    def all(self) -> list[Topic]:
+        return [
+            Topic(name=name, description=record["fields"].get("Description"))
+            for record in self._table.all(fields=["Name", "Description"])
+            if (name := record["fields"].get("Name"))
+        ]
+
+    def ids(self) -> dict[str, str]:
+        """Each topic's record ID, by name."""
+        return {
+            name: record["id"]
+            for record in self._table.all(fields=["Name"])
+            if (name := record["fields"].get("Name"))
+        }
+
+
+class AirtableSite:
+    """The Site table, which holds the site context."""
+
+    def __init__(self, table: Table) -> None:
+        self._table = table
+
+    def context(self) -> str | None:
+        return parse_site_context(self._table.all(fields=["Context"]))
+
+
+class AirtableBatches:
+    """The Audit batches table: review batches waiting to be collected."""
+
+    def __init__(self, table: Table) -> None:
+        self._table = table
+
+    def record(self, batch_id: str, submitted_at: datetime, pages: int) -> None:
+        self._table.create(
+            {
+                "Batch ID": batch_id,
+                "Submitted at": submitted_at.isoformat(),
+                "Pages": pages,
+            }
+        )
+
+    def pending(self) -> list[PendingBatch]:
+        return [
+            PendingBatch(record_id=record["id"], batch_id=record["fields"]["Batch ID"])
+            for record in self._table.all(formula="NOT({Collected})")
+        ]
+
+    def mark_collected(self, record_id: str) -> None:
+        self._table.update(record_id, {"Collected": True})
+
+
 def _stamp(moment: datetime) -> str:
     return moment.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -168,15 +270,6 @@ def checked_before(cutoff: datetime) -> str:
 
 def checked_after(cutoff: datetime) -> str:
     return f"IS_AFTER({{Checked at}}, DATETIME_PARSE('{_stamp(cutoff)}'))"
-
-
-def drop_missing(
-    updates: Sequence[UpdateRecordDict], existing: Container[str]
-) -> tuple[list[UpdateRecordDict], list[str]]:
-    kept = [update for update in updates if update["id"] in existing]
-    missing = [update["id"] for update in updates if update["id"] not in existing]
-
-    return kept, missing
 
 
 def to_check_fields(
@@ -196,7 +289,12 @@ def to_check_fields(
 
 
 def to_content_fields(
-    content: PageContent, current_hash: str, change: ContentChange, audited_at: datetime
+    content: PageContent,
+    current_hash: str,
+    change: ContentChange,
+    audited_at: datetime,
+    *,
+    review_version: str | None = None,
 ) -> dict[str, Any]:
     fields: dict[str, Any] = {
         "Current title": content.title,
@@ -238,28 +336,6 @@ def to_review_fields(
         fields["Reviewed hash"] = reviewed_hash
     if version is not None:
         fields["Review version"] = version
-
-    return fields
-
-
-def to_audit_fields(
-    content: PageContent, review: PageReview | None, audited_at: datetime
-) -> dict[str, Any]:
-    fields: dict[str, Any] = {
-        "Current title": content.title,
-        "Current description": content.meta_description,
-        "Word count": content.word_count,
-        "Last audited": audited_at.isoformat(),
-    }
-
-    if review is not None:
-        fields |= {
-            "SEO score": review.score,
-            "SEO summary": review.summary,
-            "Suggested title": review.suggested_title,
-            "Suggested description": review.suggested_description,
-            "SEO issues": "\n".join(f"- {issue}" for issue in review.issues),
-        }
 
     return fields
 
