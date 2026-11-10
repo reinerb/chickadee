@@ -4,11 +4,25 @@ from types import TracebackType
 from typing import Self
 
 import httpx
-from pyairtable import Api
+from anthropic import Anthropic
+from pyairtable import Api, Table
 
-from chickadee.airtable import AirtableChecks, AirtablePages
+from chickadee.airtable import (
+    AirtableBatches,
+    AirtableChecks,
+    AirtablePages,
+    AirtableSite,
+    AirtableTopics,
+)
 from chickadee.checker import make_client
-from chickadee.config import Options, Settings, load_options, load_settings
+from chickadee.claude import ClaudeBatches
+from chickadee.config import (
+    Options,
+    Settings,
+    load_anthropic_key,
+    load_options,
+    load_settings,
+)
 
 
 class App:
@@ -33,6 +47,9 @@ class App:
     ):
         self._stack.close()
 
+    def _table(self, name: str) -> Table:
+        return self.airtable.table(self.settings.airtable_base_id, name)
+
     @cached_property
     def settings(self) -> Settings:
         return load_settings()
@@ -50,11 +67,29 @@ class App:
         return Api(self.settings.airtable_token)
 
     @cached_property
+    def claude(self) -> Anthropic:
+        return self._stack.enter_context(Anthropic(api_key=load_anthropic_key()))
+
+    @cached_property
     def pages(self) -> AirtablePages:
-        table = self.airtable.table(self.settings.airtable_base_id, "Pages")
-        return AirtablePages(table)
+        return AirtablePages(self._table("Pages"))
 
     @cached_property
     def checks(self) -> AirtableChecks:
-        table = self.airtable.table(self.settings.airtable_base_id, "Checks")
-        return AirtableChecks(table)
+        return AirtableChecks(self._table("Checks"))
+
+    @cached_property
+    def topics(self) -> AirtableTopics:
+        return AirtableTopics(self._table("Topics"))
+
+    @cached_property
+    def site(self) -> AirtableSite:
+        return AirtableSite(self._table("Site"))
+
+    @cached_property
+    def audit_batches(self) -> AirtableBatches:
+        return AirtableBatches(self._table("Audit batches"))
+
+    @cached_property
+    def claude_batches(self) -> ClaudeBatches:
+        return ClaudeBatches(self.claude)
