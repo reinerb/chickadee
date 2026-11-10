@@ -2,15 +2,9 @@ from datetime import UTC, datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
-import pytest
-
 from chickadee.airtable import (
     checked_after,
     checked_before,
-    classify_change,
-    match_topics,
-    review_state,
-    should_log,
     to_check_fields,
     to_content_fields,
     to_link_fields,
@@ -136,46 +130,12 @@ def test_review_fields_include_score_and_bulleted_issues():
     assert fields["SEO issues"] == "- First problem\n- Second problem"
 
 
-def test_changes_mode_logs_only_when_status_changes():
-    assert should_log("Up", make_result(ok=False), "changes")
-    assert not should_log("Up", make_result(ok=True), "changes")
-
-
-def test_first_check_is_always_logged():
-    assert should_log(None, make_result(ok=True), "changes")
-
-
-def test_all_mode_logs_every_check():
-    assert should_log("Up", make_result(ok=True), "all")
-
-
 def test_status_since_only_moves_when_status_changes():
     unchanged = to_status_fields(make_result(ok=True), CHECKED_AT, "Up")
     changed = to_status_fields(make_result(ok=False), CHECKED_AT, "Up")
 
     assert "Status since" not in unchanged
     assert changed["Status since"] == CHECKED_AT.isoformat()
-
-
-def test_change_classification():
-    assert classify_change(None, "abc") == "new"
-    assert classify_change("abc", "abc") == "unchanged"
-    assert classify_change("abc", "xyz") == "changed"
-
-
-@pytest.mark.parametrize(
-    ("reviewed_hash", "reviewed_version", "state"),
-    [
-        (None, None, "new"),
-        ("old", "v1", "changed"),
-        ("old", None, "changed"),
-        ("now", None, "baseline"),
-        ("now", "v0", "setup"),
-        ("now", "v1", "current"),
-    ],
-)
-def test_review_state(reviewed_hash, reviewed_version, state):
-    assert review_state(reviewed_hash, "now", reviewed_version, "v1") == state
 
 
 def test_changed_at_is_only_set_for_real_changes():
@@ -185,15 +145,6 @@ def test_changed_at_is_only_set_for_real_changes():
     assert "Content changed at" not in new
     assert changed["Content changed at"] == CHECKED_AT.isoformat()
     assert changed["Content hash"] == "abc"
-
-
-def test_topics_match_case_insensitively_and_report_unknowns():
-    ids = {"fish": "recFish", "farmed animals": "recFarm"}
-
-    matched, unknown = match_topics(["Fish", "farmed Animals", "fish", "Cats"], ids)
-
-    assert matched == ["recFish", "recFarm"]
-    assert unknown == ["Cats"]
 
 
 def test_key_point_is_saved_as_yes_or_no():

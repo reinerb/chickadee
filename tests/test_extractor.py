@@ -4,6 +4,7 @@ from bs4 import BeautifulSoup
 
 from chickadee.extractor import (
     HASH_LENGTH,
+    classify_change,
     content_hash,
     extract_content,
     extract_links,
@@ -67,6 +68,12 @@ def head(tags: str) -> BeautifulSoup:
 
 def fingerprint(html: str, ignore: str | None = None) -> str:
     return content_hash(extract_content(html, ignore=ignore))
+
+
+def test_change_classification():
+    assert classify_change(None, "abc") == "new"
+    assert classify_change("abc", "abc") == "unchanged"
+    assert classify_change("abc", "xyz") == "changed"
 
 
 def test_extracts_metadata_and_headings():
