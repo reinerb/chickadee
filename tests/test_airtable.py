@@ -2,12 +2,14 @@ from datetime import UTC, datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from pyairtable.api.types import UpdateRecordDict
+from pyairtable.api.types import RecordDict, UpdateRecordDict
 
 from chickadee.airtable import (
+    PAGE_COLUMNS,
     checked_after,
     checked_before,
     drop_missing,
+    page_from_record,
     to_check_fields,
     to_content_fields,
     to_link_fields,
@@ -16,7 +18,7 @@ from chickadee.airtable import (
 )
 from chickadee.checker import CheckResult
 from chickadee.extractor import PageContent, content_hash
-from chickadee.results import LinkResult
+from chickadee.models import LinkResult, Page
 from chickadee.reviewer import PageReview
 
 CHECKED_AT = datetime(2026, 10, 24, 12, 0, tzinfo=UTC)
@@ -205,3 +207,49 @@ def test_fixed_links_are_cleared():
     assert "Broken links" in fields
     assert fields["Broken links"] is None
     assert fields["Broken link count"] == 0
+
+
+def test_every_page_attribute_has_a_column():
+    attributes = set(Page.model_fields) - {"id", "created_at"}
+    assert attributes == set(PAGE_COLUMNS)
+
+
+def test_page_from_a_full_record():
+    record: RecordDict = {
+        "id": "recAbc",
+        "createdTime": "2026-01-05T09:00:00.000Z",
+        "fields": {
+            "URL": "https://example.org/post",
+            "Active": True,
+            "Status": "Up",
+            "Status since": "2026-11-01T12:00:00.000Z",
+            "Last response time (ms)": 182,
+            "Key point up front": "No",
+            "Topics": ["recT1", "recT2"],
+            "Attention": ["Stale", "Key point buried"],
+        },
+    }
+
+    page = page_from_record(record)
+
+    assert page.label == "https://example.org/post"
+    assert page.active is True
+    assert page.status_since == datetime(2026, 11, 1, 12, tzinfo=UTC)
+    assert page.key_point_up_front is False
+    assert page.topic_ids == ("recT1", "recT2")
+    assert page.attention == ("Stale", "Key point buried")
+    assert page.seo_score is None  # empty fields are left out
+
+
+def test_page_from_a_new_record():
+    record: RecordDict = {
+        "id": "recNew",
+        "createdTime": "2026-11-09T15:00:00.000Z",
+        "fields": {"URL": "https://example.org/new"},
+    }
+
+    page = page_from_record(record)
+
+    assert page.active is False
+    assert page.status is None
+    assert page.attention == ()

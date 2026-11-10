@@ -1,9 +1,10 @@
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, get_args
 
 from pyairtable.api.types import RecordDict
 
 from chickadee.flags import (
+    ALL_FLAGS,
     BROKEN_LINKS,
     DOWN,
     KEY_POINT_BURIED,
@@ -15,6 +16,7 @@ from chickadee.flags import (
     flag_update,
     last_updated,
 )
+from chickadee.models import Flag
 
 NOW = datetime(2026, 10, 26, 12, 0, tzinfo=UTC)
 YEAR = timedelta(days=365)
@@ -96,3 +98,7 @@ def test_page_date_beats_a_newer_sitemap_date():
     )
 
     assert last_updated(record) == datetime(2023, 1, 1, tzinfo=UTC)
+
+
+def test_all_flags_lists_every_flag_once():
+    assert sorted(ALL_FLAGS) == sorted(get_args(Flag))
