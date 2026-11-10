@@ -1,13 +1,11 @@
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import Any
 
 from chickadee.checker import CheckResult, status_of
 from chickadee.extractor import ContentChange, PageContent
 from chickadee.results import LinkResult
 from chickadee.reviewer import PageReview
-
-ReviewState = Literal["new", "changed", "setup", "baseline", "current"]
 
 
 def _stamp(moment: datetime) -> str:
@@ -20,40 +18,6 @@ def checked_before(cutoff: datetime) -> str:
 
 def checked_after(cutoff: datetime) -> str:
     return f"IS_AFTER({{Checked at}}, DATETIME_PARSE('{_stamp(cutoff)}'))"
-
-
-def review_state(
-    reviewed_hash: str | None,
-    content_hash: str,
-    reviewed_version: str | None,
-    version: str,
-) -> ReviewState:
-    if reviewed_hash is None:
-        return "new"
-    if reviewed_hash != content_hash:
-        return "changed"
-    if reviewed_version is None:
-        return "baseline"
-    if reviewed_version != version:
-        return "setup"
-    return "current"
-
-
-def match_topics(
-    names: Sequence[str], topic_ids: Mapping[str, str]
-) -> tuple[list[str], list[str]]:
-    matched: list[str] = []
-    unknown: list[str] = []
-
-    for name in names:
-        record_id = topic_ids.get(name.strip().casefold())
-
-        if record_id is None:
-            unknown.append(name)
-        elif record_id not in matched:
-            matched.append(record_id)
-
-    return matched, unknown
 
 
 def to_check_fields(
