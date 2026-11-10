@@ -1,9 +1,12 @@
 import hashlib
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Literal
 from urllib.parse import urldefrag, urljoin, urlparse
 
 from bs4 import BeautifulSoup, Tag
+
+ContentChange = Literal["new", "changed", "unchanged"]
 
 HASH_LENGTH = 16
 STRIPPED = "script, style, noscript, nav, header, footer"
@@ -42,6 +45,13 @@ def _meta_content(soup: BeautifulSoup, selector: str) -> str | None:
         return content.strip()
 
     return None
+
+
+def classify_change(previous_hash: str | None, current_hash: str) -> ContentChange:
+    if previous_hash is None:
+        return "new"
+
+    return "unchanged" if previous_hash == current_hash else "changed"
 
 
 def content_hash(content: PageContent) -> str:

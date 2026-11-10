@@ -1,8 +1,8 @@
 import hashlib
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from anthropic import transform_schema
 from anthropic.types import Message
@@ -11,6 +11,8 @@ from pydantic import BaseModel, Field, ValidationError
 
 from chickadee.extractor import PageContent
 from chickadee.site_context import with_context
+
+ReviewState = Literal["new", "changed", "setup", "baseline", "current"]
 
 MODEL = "claude-sonnet-5-5"
 MAX_WORDS = 3000
@@ -62,6 +64,23 @@ class PageReview(BaseModel):
     )
 
 
+def review_state(
+    reviewed_hash: str | None,
+    content_hash: str,
+    reviewed_version: str | None,
+    version: str,
+) -> ReviewState:
+    if reviewed_hash is None:
+        return "new"
+    if reviewed_hash != content_hash:
+        return "changed"
+    if reviewed_version is None:
+        return "baseline"
+    if reviewed_version != version:
+        return "setup"
+    return "current"
+
+
 def review_version(system: str, schema: dict[str, Any]) -> str:
     setup = {
         "revision": REVIEW_REVISION,
@@ -72,6 +91,23 @@ def review_version(system: str, schema: dict[str, Any]) -> str:
     }
     encoded = json.dumps(setup, sort_keys=True).encode()
     return hashlib.sha256(encoded).hexdigest()[:12]
+
+
+def match_topics(
+    names: Sequence[str], topic_ids: Mapping[str, str]
+) -> tuple[list[str], list[str]]:
+    matched: list[str] = []
+    unknown: list[str] = []
+
+    for name in names:
+        record_id = topic_ids.get(name.strip().casefold())
+
+        if record_id is None:
+            unknown.append(name)
+        elif record_id not in matched:
+            matched.append(record_id)
+
+    return matched, unknown
 
 
 def build_system_prompt(topics: Sequence[Topic], *, context: str | None) -> str:

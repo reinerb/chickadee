@@ -6,8 +6,7 @@ from typing import Any, Literal
 
 import httpx
 
-from chickadee.airtable import status_of
-from chickadee.checker import CheckResult, make_client
+from chickadee.checker import CheckResult, make_client, status_of
 from chickadee.config import load_alert_webhook
 from chickadee.history import describe_duration
 from chickadee.webhooks import post_json

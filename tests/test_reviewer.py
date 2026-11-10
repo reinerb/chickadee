@@ -1,6 +1,8 @@
 import json
 import re
 
+import pytest
+
 from chickadee import reviewer
 from chickadee.extractor import PageContent
 from chickadee.reviewer import (
@@ -8,9 +10,11 @@ from chickadee.reviewer import (
     build_system_prompt,
     format_page_for_review,
     make_custom_id,
+    match_topics,
     parse_custom_id,
     parse_review_text,
     review_schema,
+    review_state,
     review_version,
     truncate_words,
 )
@@ -129,3 +133,27 @@ def test_prompt_lists_topics_with_descriptions():
 
     assert "- Fish: Research on fish welfare" in prompt
     assert "- Diet" in prompt
+
+
+@pytest.mark.parametrize(
+    ("reviewed_hash", "reviewed_version", "state"),
+    [
+        (None, None, "new"),
+        ("old", "v1", "changed"),
+        ("old", None, "changed"),
+        ("now", None, "baseline"),
+        ("now", "v0", "setup"),
+        ("now", "v1", "current"),
+    ],
+)
+def test_review_state(reviewed_hash, reviewed_version, state):
+    assert review_state(reviewed_hash, "now", reviewed_version, "v1") == state
+
+
+def test_topics_match_case_insensitively_and_report_unknowns():
+    ids = {"fish": "recFish", "farmed animals": "recFarm"}
+
+    matched, unknown = match_topics(["Fish", "farmed Animals", "fish", "Cats"], ids)
+
+    assert matched == ["recFish", "recFarm"]
+    assert unknown == ["Cats"]

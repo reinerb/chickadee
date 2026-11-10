@@ -4,6 +4,8 @@ from dataclasses import dataclass
 
 import httpx
 
+from chickadee.config import CheckLog
+
 RETRY_DELAY = 30.0
 
 
@@ -38,6 +40,19 @@ def check_url(client: httpx.Client, url: str) -> CheckResult:
         response_time_ms=elapsed_ms,
         error=None,
     )
+
+
+def status_of(result: CheckResult) -> str:
+    return "Up" if result.ok else "Down"
+
+
+def should_log(
+    previous_status: str | None, result: CheckResult, check_log: CheckLog
+) -> bool:
+    if check_log == "all":
+        return True
+
+    return previous_status != status_of(result)
 
 
 def check_pages(
