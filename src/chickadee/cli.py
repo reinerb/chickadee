@@ -3,6 +3,7 @@ import logging
 import sys
 from typing import Protocol
 
+from chickadee.app import App
 from chickadee.commands import (
     audit,
     collect,
@@ -23,7 +24,7 @@ class Command(Protocol):
 
     def add_arguments(self, parser: argparse.ArgumentParser) -> None: ...
 
-    def run(self, args: argparse.Namespace) -> None: ...
+    def run(self, args: argparse.Namespace, app: App) -> None: ...
 
 
 COMMANDS: dict[str, Command] = {
@@ -62,7 +63,8 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
     try:
-        args.run(args)
+        with App() as app:
+            args.run(args, app)
     except ChickadeeError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
