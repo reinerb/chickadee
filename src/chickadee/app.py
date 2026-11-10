@@ -4,7 +4,9 @@ from types import TracebackType
 from typing import Self
 
 import httpx
+from pyairtable import Api
 
+from chickadee.airtable import AirtablePages
 from chickadee.checker import make_client
 from chickadee.config import Options, Settings, load_options, load_settings
 
@@ -42,3 +44,12 @@ class App:
     @cached_property
     def http(self) -> httpx.Client:
         return self._stack.enter_context(make_client())
+
+    @cached_property
+    def airtable(self) -> Api:
+        return Api(self.settings.airtable_token)
+
+    @cached_property
+    def pages(self) -> AirtablePages:
+        table = self.airtable.table(self.settings.airtable_base_id, "Pages")
+        return AirtablePages(table)
