@@ -65,10 +65,7 @@ def fetch_sitemap(
     except httpx.HTTPError as exc:
         raise SitemapError(type(exc).__name__) from exc
 
-    try:
-        return decompress(b"".join(chunks), limit)
-    except SitemapError as exc:
-        raise SitemapError(f"{url}: {exc}") from None
+    return decompress(b"".join(chunks), limit)
 
 
 def parse_sitemap(xml: bytes | str) -> SitemapEntries:
