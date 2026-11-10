@@ -2,8 +2,7 @@ from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-from chickadee.checker import CheckResult
-from chickadee.config import CheckLog
+from chickadee.checker import CheckResult, status_of
 from chickadee.extractor import PageContent
 from chickadee.results import LinkResult
 from chickadee.reviewer import PageReview
@@ -148,19 +147,6 @@ def to_audit_fields(
         }
 
     return fields
-
-
-def status_of(result: CheckResult) -> str:
-    return "Up" if result.ok else "Down"
-
-
-def should_log(
-    previous_status: str | None, result: CheckResult, check_log: CheckLog
-) -> bool:
-    if check_log == "all":
-        return True
-
-    return previous_status != status_of(result)
 
 
 def to_status_fields(
