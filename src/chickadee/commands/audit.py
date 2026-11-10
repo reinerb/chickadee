@@ -10,6 +10,7 @@ from pyairtable import Api
 from pyairtable.api.types import UpdateRecordDict
 
 from chickadee.airtable import to_content_fields
+from chickadee.app import App
 from chickadee.checker import make_client
 from chickadee.config import load_anthropic_key, load_options, load_settings
 from chickadee.extractor import classify_change, content_hash, extract_content
@@ -36,7 +37,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def run(args: argparse.Namespace) -> None:
+def run(args: argparse.Namespace, app: App) -> None:
     settings = load_settings()
     options = load_options()
     api = Api(settings.airtable_token)

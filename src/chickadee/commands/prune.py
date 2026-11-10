@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 from pyairtable import Api
 
 from chickadee.airtable import checked_before
+from chickadee.app import App
 from chickadee.commands._args import positive_int
 from chickadee.config import load_options, load_settings
 
@@ -23,7 +24,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def run(args: argparse.Namespace) -> None:
+def run(args: argparse.Namespace, app: App) -> None:
     settings = load_settings()
     checks = Api(settings.airtable_token).table(settings.airtable_base_id, "Checks")
     days = args.days if args.days is not None else load_options().retention_days
