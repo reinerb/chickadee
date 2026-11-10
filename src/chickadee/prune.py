@@ -3,8 +3,8 @@ from datetime import UTC, datetime, timedelta
 
 from pyairtable import Api
 
+from chickadee.airtable import checked_before
 from chickadee.config import load_options, load_settings
-from chickadee.formulas import checked_before
 
 HELP = "Delete logged checks older than the retention period."
 
