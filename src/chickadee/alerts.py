@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -7,7 +8,10 @@ import httpx
 
 from chickadee.checker import CheckResult, status_of
 from chickadee.history import describe_duration
+from chickadee.models import Status
 from chickadee.webhooks import post_json
+
+log = logging.getLogger(__name__)
 
 AlertAction = Literal["send", "record", "none"]
 
@@ -15,7 +19,7 @@ AlertAction = Literal["send", "record", "none"]
 @dataclass(frozen=True)
 class PendingAlert:
     record_id: str
-    status: str
+    status: Status
     payload: dict[str, Any]
 
 
@@ -121,7 +125,7 @@ def deliver_alerts(
     for alert in pending:
         error = post_json(client, webhook_url, alert.payload)
         if error:
-            print(f"  alert failed for {alert.payload['page']}: {error}")
+            log.warning("  alert failed for %s: %s", alert.payload["page"], error)
         else:
             delivered.append(alert)
 
