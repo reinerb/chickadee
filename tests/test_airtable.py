@@ -2,13 +2,12 @@ from datetime import UTC, datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from pyairtable.api.types import RecordDict, UpdateRecordDict
+from pyairtable.api.types import RecordDict
 
 from chickadee.airtable import (
     PAGE_COLUMNS,
     checked_after,
     checked_before,
-    drop_missing,
     page_from_record,
     to_check_fields,
     to_content_fields,
@@ -126,17 +125,14 @@ def test_missing_title_is_sent_as_none_to_clear_old_value():
     assert fields["Current title"] is None
 
 
-def test_reviews_for_deleted_pages_are_set_aside():
-    updates: list[UpdateRecordDict] = [
-        {"id": "rec1", "fields": {"SEO score": 7}},
-        {"id": "rec2", "fields": {"SEO score": 5}},
-        {"id": "rec3", "fields": {"SEO score": 9}},
-    ]
+def test_review_version_is_recorded_only_when_given():
+    plain = to_content_fields(CONTENT, content_hash(CONTENT), "unchanged", CHECKED_AT)
+    baseline = to_content_fields(
+        CONTENT, content_hash(CONTENT), "unchanged", CHECKED_AT, review_version="v2"
+    )
 
-    kept, missing = drop_missing(updates, {"rec1", "rec3", "rec4"})
-
-    assert [update["id"] for update in kept] == ["rec1", "rec3"]
-    assert missing == ["rec2"]
+    assert "Review version" not in plain
+    assert baseline["Review version"] == "v2"
 
 
 def test_review_fields_include_score_and_bulleted_issues():
