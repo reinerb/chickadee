@@ -3,8 +3,7 @@ import logging
 import sys
 from typing import Protocol
 
-from chickadee import (
-    alerts,
+from chickadee.commands import (
     audit,
     collect,
     digest,
@@ -12,6 +11,7 @@ from chickadee import (
     importer,
     links,
     prune,
+    test_alert,
     uptime,
 )
 from chickadee.errors import ChickadeeError
@@ -35,7 +35,7 @@ COMMANDS: dict[str, Command] = {
     "flags": flags,
     "digest": digest,
     "prune": prune,
-    "test-alert": alerts,
+    "test-alert": test_alert,
 }
 
 

@@ -4,17 +4,10 @@ from datetime import UTC, datetime, timedelta
 from pyairtable import Api
 
 from chickadee.airtable import checked_before
+from chickadee.commands._args import positive_int
 from chickadee.config import load_options, load_settings
 
 HELP = "Delete logged checks older than the retention period."
-
-
-def positive_int(value: str) -> int:
-    number = int(value)
-    if number < 1:
-        raise argparse.ArgumentTypeError("must be at least 1")
-
-    return number
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:

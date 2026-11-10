@@ -1,7 +1,10 @@
+import argparse
+
 import pytest
 
-from chickadee import prune
 from chickadee.cli import COMMANDS, build_parser
+from chickadee.commands import prune
+from chickadee.commands._args import positive_int
 
 
 def test_arguments_reach_the_right_command():
@@ -10,6 +13,11 @@ def test_arguments_reach_the_right_command():
     assert args.run is prune.run
     assert args.days == 30
     assert args.dry_run is True
+
+
+def test_zero_days_is_rejected():
+    with pytest.raises(argparse.ArgumentTypeError):
+        positive_int("0")
 
 
 def test_a_command_is_required():

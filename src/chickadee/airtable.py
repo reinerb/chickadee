@@ -1,6 +1,8 @@
-from collections.abc import Sequence
+from collections.abc import Container, Sequence
 from datetime import UTC, datetime
 from typing import Any
+
+from pyairtable.api.types import UpdateRecordDict
 
 from chickadee.checker import CheckResult, status_of
 from chickadee.extractor import ContentChange, PageContent
@@ -18,6 +20,15 @@ def checked_before(cutoff: datetime) -> str:
 
 def checked_after(cutoff: datetime) -> str:
     return f"IS_AFTER({{Checked at}}, DATETIME_PARSE('{_stamp(cutoff)}'))"
+
+
+def drop_missing(
+    updates: Sequence[UpdateRecordDict], existing: Container[str]
+) -> tuple[list[UpdateRecordDict], list[str]]:
+    kept = [update for update in updates if update["id"] in existing]
+    missing = [update["id"] for update in updates if update["id"] not in existing]
+
+    return kept, missing
 
 
 def to_check_fields(
