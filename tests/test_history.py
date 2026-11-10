@@ -1,20 +1,16 @@
 from datetime import UTC, datetime
-from typing import Any
-
-from pyairtable.api.types import RecordDict
 
 from chickadee.history import describe_duration, find_events, latest_status
+from chickadee.models import Check
 
 
-def make_check(page_id: str, at: str, ok: bool) -> RecordDict:
-    fields: dict[str, Any] = {
-        "Page": [page_id],
-        "Checked at": at,
-        "Status code": 200 if ok else 503,
-    }
-    if ok:
-        fields["Ok"] = True
-    return {"id": f"rec-{page_id}-{at}", "createdTime": at, "fields": fields}
+def make_check(page_id: str, at: str, ok: bool) -> Check:
+    return Check(
+        page_id=page_id,
+        checked_at=datetime.fromisoformat(at),
+        ok=ok,
+        status_code=200 if ok else 503,
+    )
 
 
 def test_changes_log_reports_outage_and_recovery():
