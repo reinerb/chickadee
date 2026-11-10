@@ -2,8 +2,10 @@ import time
 import zlib
 from dataclasses import dataclass, field
 from datetime import datetime
+from xml.etree.ElementTree import ParseError
 
 import httpx
+from defusedxml import DefusedXmlException
 from defusedxml.ElementTree import fromstring
 
 from chickadee.errors import ChickadeeError
@@ -70,7 +72,11 @@ def fetch_sitemap(
 
 
 def parse_sitemap(xml: bytes | str) -> SitemapEntries:
-    root = fromstring(xml)
+    try:
+        root = fromstring(xml)
+    except (ParseError, DefusedXmlException) as exc:
+        raise SitemapError(f"not a valid sitemap: {exc}") from exc
+
     pages: list[str] = []
     lastmod: dict[str, datetime] = {}
 
