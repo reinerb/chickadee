@@ -109,7 +109,7 @@ class Page(BaseModel):
         # Attention is a multiple select, so it can hold options Chickadee
         # doesn't know, like a renamed flag. Ignore them rather than fail.
         if isinstance(value, list | tuple):
-            return tuple(flag for flag in value if flag in get_args(Flag))
+            return tuple(flag for flag in get_args(Flag) if flag in value)
         return value
 
     @property
