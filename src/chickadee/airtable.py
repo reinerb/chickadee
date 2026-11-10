@@ -308,6 +308,8 @@ def to_content_fields(
 
     if change == "changed":
         fields["Content changed at"] = audited_at.isoformat()
+    if review_version is not None:
+        fields["Review version"] = review_version
 
     return fields
 
