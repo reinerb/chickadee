@@ -12,6 +12,7 @@ from chickadee.airtable import (
     page_from_record,
     to_check_fields,
     to_content_fields,
+    to_flag_fields,
     to_link_fields,
     to_review_fields,
     to_status_fields,
@@ -253,3 +254,11 @@ def test_page_from_a_new_record():
     assert page.active is False
     assert page.status is None
     assert page.attention == ()
+
+
+def test_flag_fields_store_the_flags_and_their_count():
+    assert to_flag_fields(["Stale", "Down"]) == {
+        "Attention": ["Stale", "Down"],
+        "Attention count": 2,
+    }
+    assert to_flag_fields([]) == {"Attention": [], "Attention count": 0}
