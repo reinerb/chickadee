@@ -52,10 +52,10 @@ src/chickadee/
   alerts.py      alert rules, payloads and delivery, plus chickadee test-alert
   webhooks.py    posts JSON to a webhook without exposing its URL in errors
   config.py      reads credentials and settings from the environment or .env
-  checker.py     the shared HTTP client, single-page check, and the retry for failed checks
+  checker.py     the shared HTTP client, single-page check, the retry for failed checks, and what gets logged
   extractor.py   pulls the title, description, dates, headings, text and links from HTML, and fingerprints it
-  reviewer.py    the review schema, prompt, topics, batch requests and validation
-  airtable.py    turns results into Airtable fields, builds formulas for filtering checks by date, and decides what gets logged and what needs review
+  reviewer.py    the review schema, prompt, topics, batch requests and validation, and what needs review
+  airtable.py    turns results into Airtable fields and builds formulas for filtering checks by date
   history.py     turns logged checks into outage and recovery events
   sitemap.py     reads sitemaps and sitemap indexes, including compressed ones and lastmod dates
   site_context.py  reads and checks the site context, and places it in prompts
