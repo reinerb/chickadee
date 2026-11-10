@@ -1,25 +1,15 @@
 import argparse
-from collections.abc import Container, Sequence
 from datetime import UTC, datetime
 
 from anthropic import Anthropic
 from pyairtable import Api
 from pyairtable.api.types import UpdateRecordDict
 
-from chickadee.airtable import to_review_fields
+from chickadee.airtable import drop_missing, to_review_fields
 from chickadee.config import load_anthropic_key, load_settings
 from chickadee.reviewer import match_topics, parse_custom_id, parse_review
 
 HELP = "Save finished reviews from Claude."
-
-
-def drop_missing(
-    updates: Sequence[UpdateRecordDict], existing: Container[str]
-) -> tuple[list[UpdateRecordDict], list[str]]:
-    kept = [update for update in updates if update["id"] in existing]
-    missing = [update["id"] for update in updates if update["id"] not in existing]
-
-    return kept, missing
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
