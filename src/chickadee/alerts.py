@@ -37,6 +37,7 @@ def decide_alert(alerted: str | None, status: str) -> AlertAction:
 def down_since(
     previous_status: str | None,
     status_since: datetime | None,
+    *,
     ok: bool,
     checked_at: datetime,
 ) -> datetime | None:
