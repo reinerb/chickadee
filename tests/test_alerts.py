@@ -151,7 +151,8 @@ def test_test_alerts_cover_both_events_with_the_same_shape():
     recovered = build_test_alert(recovered=True, now=NOW)
 
     assert (down["event"], recovered["event"]) == ("down", "recovered")
-    assert down["test"] and recovered["test"]
+    assert down["test"]
+    assert recovered["test"]
     assert down.keys() == recovered.keys()
 
 
