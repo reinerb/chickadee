@@ -117,6 +117,8 @@ def run(args: argparse.Namespace) -> None:
         return
 
     if plan.to_add:
-        pages.batch_create({"URL": url, "Active": True} for url in plan.to_add)
+        pages.batch_create(
+            new_page_fields(url, sitemap_pages[url]) for url in plan.to_add
+        )
 
     print(f"Added {len(plan.to_add)} page(s).")
