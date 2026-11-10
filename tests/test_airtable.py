@@ -157,6 +157,16 @@ def test_status_since_only_moves_when_status_changes():
     assert changed["Status since"] == CHECKED_AT.isoformat()
 
 
+def test_alerted_status_is_saved_only_when_given():
+    plain = to_status_fields(make_result(ok=True), CHECKED_AT, None)
+    recorded = to_status_fields(
+        make_result(ok=True), CHECKED_AT, None, alerted_status="Up"
+    )
+
+    assert "Alerted status" not in plain
+    assert recorded["Alerted status"] == "Up"
+
+
 def test_changed_at_is_only_set_for_real_changes():
     new = to_content_fields(CONTENT, "abc", "new", CHECKED_AT)
     changed = to_content_fields(CONTENT, "abc", "changed", CHECKED_AT)
