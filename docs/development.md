@@ -43,6 +43,7 @@ src/chickadee/
   cli.py         the chickadee command: parses arguments and runs one subcommand
   __main__.py    lets python -m chickadee run the same command
   errors.py      ChickadeeError, the failures cli.py reports as a message instead of a traceback
+  app.py         builds the settings and clients commands use, and closes them afterwards
   config.py      reads credentials and settings from the environment or .env
   commands/      one module per subcommand: its help, arguments, and the run function that wires it up
     import, uptime, audit, collect, links, flags, digest, prune, test-alert
@@ -75,7 +76,7 @@ Every module in `commands/` has the same three things:
 HELP = "One line describing the command."
 
 
-def add_arguments(parser: argparse.ArgumentParser) -> None:
+def add_arguments(parser: argparse.ArgumentParser, app: App) -> None:
     parser.add_argument("--example", action="store_true", help="...")
 
 
