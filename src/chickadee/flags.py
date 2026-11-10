@@ -5,16 +5,18 @@ from typing import Any
 
 from pyairtable.api.types import RecordDict
 
+from chickadee.models import Flag
+
 LOW_SCORE = 4
 
-DOWN = "Down"
-BROKEN_LINKS = "Has broken links"
-STALE = "Stale"
-LOW_SCORE_FLAG = "Low SEO score"
-MISSING_METADATA = "Missing metadata"
-KEY_POINT_BURIED = "Key point buried"
+DOWN: Flag = "Down"
+BROKEN_LINKS: Flag = "Has broken links"
+STALE: Flag = "Stale"
+LOW_SCORE_FLAG: Flag = "Low SEO score"
+MISSING_METADATA: Flag = "Missing metadata"
+KEY_POINT_BURIED: Flag = "Key point buried"
 
-ALL_FLAGS = (
+ALL_FLAGS: tuple[Flag, ...] = (
     DOWN,
     BROKEN_LINKS,
     STALE,
