@@ -61,12 +61,12 @@ src/chickadee/
   history.py     turns logged checks into outage and recovery events
   sitemap.py     reads sitemaps and sitemap indexes, including compressed ones and lastmod dates
   site_context.py  reads and checks the site context, and places it in prompts
-  results.py     the link check result type, shared by links.py and airtable.py
+  models.py      data types shared across modules: Page, LinkResult, and the Status and Flag values
 ```
 
 `__init__.py` is deliberately empty. Python runs a package's `__init__.py` whenever anything in the package is imported, so code there gets loaded constantly and can create import loops.
 
-`results.py` exists for the same reason: `links.py` and `airtable.py` both need the link result type, and putting it in either one made them import each other. A type both modules share belongs in a third module that imports neither.
+`models.py` exists for the same reason: several modules need the same types, and putting a type in any one of them would make the others import it, and sometimes import each other. Types shared between modules live in `models.py`, which imports no other part of Chickadee. It also holds no Airtable column names: `airtable.py` maps each `Page` attribute to its column in `PAGE_COLUMNS`.
 
 ## Adding a command
 
