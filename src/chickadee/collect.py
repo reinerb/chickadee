@@ -6,9 +6,9 @@ from anthropic import Anthropic
 from pyairtable import Api
 from pyairtable.api.types import UpdateRecordDict
 
+from chickadee.airtable import match_topics, to_review_fields
 from chickadee.config import load_anthropic_key, load_settings
 from chickadee.reviewer import parse_custom_id, parse_review
-from chickadee.store import match_topics, to_review_fields
 
 HELP = "Save finished reviews from Claude."
 

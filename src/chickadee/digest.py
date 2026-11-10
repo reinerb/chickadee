@@ -12,6 +12,7 @@ from markdown_it import MarkdownIt
 from pyairtable import Api
 from pyairtable.api.types import RecordDict
 
+from chickadee.airtable import checked_after, checked_before
 from chickadee.checker import make_client
 from chickadee.config import (
     load_anthropic_key,
@@ -19,7 +20,6 @@ from chickadee.config import (
     load_settings,
 )
 from chickadee.flags import ALL_FLAGS
-from chickadee.formulas import checked_after, checked_before
 from chickadee.history import Event, describe_duration, find_events, latest_status
 from chickadee.site_context import load_site_context, with_context
 from chickadee.webhooks import post_json

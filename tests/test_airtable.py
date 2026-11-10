@@ -1,13 +1,12 @@
 from datetime import UTC, datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import pytest
 
-from chickadee.checker import CheckResult
-from chickadee.extractor import PageContent, content_hash
-from chickadee.results import LinkResult
-from chickadee.reviewer import PageReview
-from chickadee.store import (
+from chickadee.airtable import (
+    checked_after,
+    checked_before,
     classify_change,
     match_topics,
     review_state,
@@ -18,6 +17,10 @@ from chickadee.store import (
     to_review_fields,
     to_status_fields,
 )
+from chickadee.checker import CheckResult
+from chickadee.extractor import PageContent, content_hash
+from chickadee.results import LinkResult
+from chickadee.reviewer import PageReview
 
 CHECKED_AT = datetime(2026, 10, 24, 12, 0, tzinfo=UTC)
 CONTENT = PageContent(
@@ -53,6 +56,28 @@ def make_result(ok: bool) -> CheckResult:
         status_code=200 if ok else 503,
         response_time_ms=100,
         error=None,
+    )
+
+
+def test_formula_uses_utc_timestamp():
+    cutoff = datetime(2026, 10, 10, 12, 0, tzinfo=UTC)
+
+    assert checked_before(cutoff) == (
+        "IS_BEFORE({Checked at}, DATETIME_PARSE('2026-10-10T12:00:00Z'))"
+    )
+
+
+def test_formula_converts_other_timezones_to_utc():
+    cutoff = datetime(2026, 10, 10, 8, 0, tzinfo=ZoneInfo("America/New_York"))
+
+    assert "2026-10-10T12:00:00Z" in checked_before(cutoff)
+
+
+def test_checked_after_uses_is_after():
+    cutoff = datetime(2026, 10, 10, 12, 0, tzinfo=UTC)
+
+    assert checked_after(cutoff) == (
+        "IS_AFTER({Checked at}, DATETIME_PARSE('2026-10-10T12:00:00Z'))"
     )
 
 

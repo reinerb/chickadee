@@ -6,10 +6,10 @@ from typing import Any, Literal
 
 import httpx
 
+from chickadee.airtable import status_of
 from chickadee.checker import CheckResult, make_client
 from chickadee.config import load_alert_webhook
 from chickadee.history import describe_duration
-from chickadee.store import status_of
 from chickadee.webhooks import post_json
 
 HELP = "Send a sample alert to the alert webhook."

@@ -55,12 +55,11 @@ src/chickadee/
   checker.py     the shared HTTP client, single-page check, and the retry for failed checks
   extractor.py   pulls the title, description, dates, headings, text and links from HTML, and fingerprints it
   reviewer.py    the review schema, prompt, topics, batch requests and validation
-  store.py       turns results into Airtable fields, and decides what gets logged and what needs review
+  airtable.py    turns results into Airtable fields, builds formulas for filtering checks by date, and decides what gets logged and what needs review
   history.py     turns logged checks into outage and recovery events
-  formulas.py    Airtable formulas for filtering checks by date
   sitemap.py     reads sitemaps and sitemap indexes, including compressed ones and lastmod dates
   site_context.py  reads and checks the site context, and places it in prompts
-  results.py     the link check result type, shared by links.py and store.py
+  results.py     the link check result type, shared by links.py and airtable.py
 tests/
 make/
   alerts.blueprint.json   sample Make scenario for routing alerts
@@ -72,7 +71,7 @@ make/
 
 `__init__.py` is deliberately empty. Python runs a package's `__init__.py` whenever anything in the package is imported, so code there gets loaded constantly and can create import loops.
 
-`results.py` exists for the same reason: `links.py` and `store.py` both need the link result type, and putting it in either one made them import each other. A type both modules share belongs in a third module that imports neither.
+`results.py` exists for the same reason: `links.py` and `airtable.py` both need the link result type, and putting it in either one made them import each other. A type both modules share belongs in a third module that imports neither.
 
 ## Adding a command
 
