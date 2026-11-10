@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -11,6 +12,8 @@ from pydantic import BaseModel, Field, ValidationError
 
 from chickadee.extractor import PageContent
 from chickadee.site_context import with_context
+
+log = logging.getLogger(__name__)
 
 ReviewState = Literal["new", "changed", "setup", "baseline", "current"]
 
@@ -191,7 +194,7 @@ def parse_review_text(text: str) -> PageReview | None:
     try:
         return PageReview.model_validate_json(text)
     except ValidationError as exc:
-        print(f"  invalid review: {exc.error_count()} problem(s)")
+        log.warning("  invalid review: %d problem(s)", exc.error_count())
         return None
 
 

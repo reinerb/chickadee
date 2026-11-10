@@ -1,32 +1,10 @@
 import argparse
-import time
-from collections import Counter
 from datetime import UTC, datetime
 
-import httpx
-from anthropic import Anthropic
-from anthropic.types.messages.batch_create_params import Request
-from pyairtable import Api
-from pyairtable.api.types import UpdateRecordDict
-
-from chickadee.airtable import to_content_fields
 from chickadee.app import App
-from chickadee.checker import make_client
-from chickadee.config import load_anthropic_key, load_options, load_settings
-from chickadee.extractor import classify_change, content_hash, extract_content
-from chickadee.reviewer import (
-    Topic,
-    build_review_request,
-    build_system_prompt,
-    review_schema,
-    review_state,
-    review_version,
-)
-from chickadee.site_context import load_site_context
+from chickadee.audit import review_setup, run_audit, submit_reviews
 
 HELP = "Read each page, record changes, and send new or changed pages for review."
-
-NEEDS_REVIEW = ("new", "changed", "setup")
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
@@ -38,105 +16,28 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 def run(args: argparse.Namespace, app: App) -> None:
-    settings = load_settings()
-    options = load_options()
-    api = Api(settings.airtable_token)
-    pages = api.table(settings.airtable_base_id, "Pages")
-    batches = api.table(settings.airtable_base_id, "Audit batches")
-
-    topics = sorted(
-        (
-            Topic(
-                name=record["fields"]["Name"],
-                description=record["fields"].get("Description"),
-            )
-            for record in api.table(settings.airtable_base_id, "Topics").all(
-                fields=["Name", "Description"]
-            )
-            if record["fields"].get("Name")
-        ),
-        key=lambda topic: topic.name.casefold(),
-    )
-    if not topics:
-        raise SystemExit("Add at least one topic to the Topics table before auditing.")
-
-    context = load_site_context(api, settings.airtable_base_id)
-    system = build_system_prompt(topics, context=context)
-    schema = review_schema([topic.name for topic in topics])
-    version = review_version(system, schema)
+    topics = app.topics.all()
+    context = app.site.context()
+    setup = review_setup(topics, context)
     print(
-        f"Review version {version} "
+        f"Review version {setup.version} "
         f"({'with' if context else 'without'} site context, {len(topics)} topic(s))"
     )
 
     audited_at = datetime.now(UTC)
-    updates: list[UpdateRecordDict] = []
-    requests: list[Request] = []
-    counts: Counter[str] = Counter()
-    states: Counter[str] = Counter()
-
-    records = pages.all(
-        formula="{Active}",
-        fields=["URL", "Content hash", "Reviewed hash", "Review version"],
+    report = run_audit(
+        app.pages,
+        app.http,
+        setup,
+        ignore=app.options.ignore_selectors,
+        review_all=args.all,
+        audited_at=audited_at,
     )
 
-    with make_client() as client:
-        for record in records:
-            fields = record["fields"]
-            url = fields["URL"]
-            time.sleep(1)
-
-            try:
-                response = client.get(url)
-            except httpx.RequestError as exc:
-                print(f"SKIP {url}: {exc}")
-                continue
-
-            content_type = response.headers.get("content-type", "")
-            if not response.is_success or "text/html" not in content_type:
-                print(f"SKIP {url}: status {response.status_code}, {content_type}")
-                continue
-
-            content = extract_content(response.text, ignore=options.ignore_selectors)
-            current = content_hash(content)
-            change = classify_change(fields.get("Content hash"), current)
-            counts[change] += 1
-
-            state = review_state(
-                fields.get("Reviewed hash"),
-                current,
-                fields.get("Review version"),
-                version,
-            )
-            states[state] += 1
-
-            page_fields = to_content_fields(content, current, change, audited_at)
-            if state == "baseline":
-                page_fields["Review version"] = version
-            updates.append({"id": record["id"], "fields": page_fields})
-
-            if args.all or state in NEEDS_REVIEW:
-                requests.append(
-                    build_review_request(
-                        record["id"],
-                        current,
-                        url,
-                        content,
-                        system=system,
-                        schema=schema,
-                        version=version,
-                    )
-                )
-                action = "review"
-            else:
-                action = "skip"
-            print(f"{change:<9} {action:<6} {state:<8} {url}")
-
-    if updates:
-        pages.batch_update(updates)
+    changes, states = report.changes, report.states
     print(
-        f"{counts['new']} new, {counts['changed']} changed, "
-        f"{counts['unchanged']} unchanged."
+        f"{changes['new']} new, {changes['changed']} changed, "
+        f"{changes['unchanged']} unchanged."
     )
     if states["baseline"]:
         print(
@@ -149,18 +50,12 @@ def run(args: argparse.Namespace, app: App) -> None:
             "because the review setup changed."
         )
 
-    if not requests:
+    if not report.requests:
         print("No pages need review.")
         return
 
-    claude = Anthropic(api_key=load_anthropic_key())
-    batch = claude.messages.batches.create(requests=requests)
-    batches.create(
-        {
-            "Batch ID": batch.id,
-            "Submitted at": audited_at.isoformat(),
-            "Pages": len(requests),
-        }
+    batch_id = submit_reviews(
+        app.claude_batches, app.audit_batches, report.requests, audited_at
     )
-    print(f"Submitted batch {batch.id} with {len(requests)} page(s).")
+    print(f"Submitted batch {batch_id} with {len(report.requests)} page(s).")
     print("Run `uv run chickadee collect` later to save the reviews.")
