@@ -1,11 +1,38 @@
+import logging
+import time
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Protocol
+from urllib.parse import urlparse
+
 import httpx
 
 from chickadee.extractor import extract_links
-from chickadee.models import LinkResult, LinkStatus
+from chickadee.models import LinkResult, LinkStatus, Page
+
+log = logging.getLogger(__name__)
 
 BROKEN_CODES = {404, 410}
 MAX_LINKS_PER_PAGE = 100
 PER_HOST_INTERVAL = 1.0
+
+
+@dataclass(frozen=True)
+class LinksReport:
+    pages: int
+    links: int
+    broken: int
+
+
+class LinkPages(Protocol):
+    """What run_links needs from wherever pages are kept."""
+
+    def active(self) -> Iterable[Page]: ...
+
+    def save_links(
+        self, results: Mapping[str, Sequence[LinkResult]], checked_at: datetime
+    ) -> None: ...
 
 
 def classify(status_code: int) -> LinkStatus:
@@ -53,14 +80,71 @@ def links_on_page(
     try:
         response = client.get(url)
     except httpx.RequestError as exc:
-        print(f"SKIP {url}: {type(exc).__name__}")
+        log.warning("SKIP %s: %s", url, type(exc).__name__)
         return None
 
     if not response.is_success or "text/html" not in response.headers.get(
         "content-type", ""
     ):
-        print(f"SKIP {url}: status {response.status_code}")
+        log.warning("SKIP %s: status %s", url, response.status_code)
         return None
 
     links = extract_links(response.text, str(response.url), ignore=ignore)
     return links[:MAX_LINKS_PER_PAGE]
+
+
+def check_links(
+    client: httpx.Client,
+    links: Iterable[str],
+    *,
+    sleep: Callable[[float], None],
+    monotonic: Callable[[], float],
+) -> dict[str, LinkResult]:
+    """Check each link, pausing between requests to the same site."""
+    results: dict[str, LinkResult] = {}
+    last_request: dict[str, float] = {}
+
+    for link in links:
+        host = urlparse(link).netloc
+        sleep(wait_needed(last_request.get(host), monotonic(), PER_HOST_INTERVAL))
+
+        result = check_link(client, link)
+        last_request[host] = monotonic()
+        results[link] = result
+
+        if result.status != "ok":
+            log.info("  %-10s %-16s %s", result.status, result.detail, link)
+
+    return results
+
+
+def run_links(
+    pages: LinkPages,
+    client: httpx.Client,
+    *,
+    ignore: str | None,
+    checked_at: datetime,
+    sleep: Callable[[float], None] = time.sleep,
+    monotonic: Callable[[], float] = time.monotonic,
+) -> LinksReport:
+    found: dict[str, list[str]] = {}
+    for page in pages.active():
+        sleep(1)
+        links = links_on_page(client, page.url, ignore=ignore)
+        if links is not None:
+            found[page.id] = links
+
+    unique = list(dict.fromkeys(link for links in found.values() for link in links))
+    log.info("Checking %d unique link(s) on %d pages", len(unique), len(found))
+    results = check_links(client, unique, sleep=sleep, monotonic=monotonic)
+
+    pages.save_links(
+        {
+            page_id: [results[link] for link in links]
+            for page_id, links in found.items()
+        },
+        checked_at,
+    )
+
+    broken = sum(1 for result in results.values() if result.status == "broken")
+    return LinksReport(pages=len(found), links=len(unique), broken=broken)
