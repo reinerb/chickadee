@@ -1,17 +1,13 @@
-import argparse
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Any, Literal
 
 import httpx
 
-from chickadee.checker import CheckResult, make_client, status_of
-from chickadee.config import load_alert_webhook
+from chickadee.checker import CheckResult, status_of
 from chickadee.history import describe_duration
 from chickadee.webhooks import post_json
-
-HELP = "Send a sample alert to the alert webhook."
 
 AlertAction = Literal["send", "record", "none"]
 
@@ -130,25 +126,3 @@ def deliver_alerts(
             delivered.append(alert)
 
     return delivered
-
-
-def add_arguments(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument(
-        "--recovered",
-        action="store_true",
-        help="send a 'back up' alert instead of a 'down' alert",
-    )
-
-
-def run(args: argparse.Namespace) -> None:
-    webhook_url = load_alert_webhook()
-    if not webhook_url:
-        raise SystemExit("Set ALERT_WEBHOOK_URL in .env first.")
-
-    sample = build_test_alert(recovered=args.recovered, now=datetime.now(UTC))
-    with make_client() as client:
-        error = post_json(client, webhook_url, sample)
-
-    if error:
-        raise SystemExit(f"Test alert failed: {error}")
-    print(f"Sent a test '{sample['event']}' alert.")
