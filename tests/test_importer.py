@@ -1,14 +1,41 @@
+from collections.abc import Mapping
 from datetime import UTC, datetime
 
+import httpx
 import pytest
 
-from chickadee.importer import new_page_fields, plan_import, url_key
+from chickadee.importer import plan_import, run_import, url_key
 
 SITEMAP = [
     "https://example.org/research/a/",
     "https://example.org/research/b/",
     "https://example.org/about/",
 ]
+SITEMAP_XML = b"""<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://example.org/new/</loc><lastmod>2026-03-01</lastmod></url>
+  <url><loc>https://example.org/undated/</loc></url>
+  <url><loc>https://example.org/tracked/</loc></url>
+</urlset>"""
+
+
+class FakePages:
+    def __init__(self, *tracked: str) -> None:
+        self.tracked = set(tracked)
+        self.added: dict[str, datetime | None] = {}
+
+    def tracked_urls(self) -> set[str]:
+        return self.tracked
+
+    def add(self, pages: Mapping[str, datetime | None]) -> None:
+        self.added = dict(pages)
+
+
+def sitemap_client() -> httpx.Client:
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(200, content=SITEMAP_XML)
+    )
+    return httpx.Client(transport=transport)
 
 
 def test_only_untracked_pages_are_added():
@@ -81,17 +108,33 @@ def test_plan_matches_urls_written_differently():
     assert plan.no_longer_listed == ("https://example.org/gone/",)
 
 
-def test_new_pages_keep_the_sitemap_lastmod():
-    lastmod = datetime(2026, 3, 1, 9, 30, tzinfo=UTC)
+def test_new_pages_are_added_with_their_lastmod():
+    pages = FakePages("https://example.org/tracked/")
 
-    assert new_page_fields("https://example.org/post", lastmod) == {
-        "URL": "https://example.org/post",
-        "Active": True,
-        "Sitemap lastmod": "2026-03-01T09:30:00+00:00",
+    report = run_import(
+        pages,
+        sitemap_client(),
+        "https://example.org/sitemap.xml",
+        sleep=lambda seconds: None,
+    )
+
+    assert report.found == 3
+    assert pages.added == {
+        "https://example.org/new/": datetime(2026, 3, 1, tzinfo=UTC),
+        "https://example.org/undated/": None,
     }
 
 
-def test_new_pages_without_a_lastmod_leave_it_empty():
-    fields = new_page_fields("https://example.org/post", None)
+def test_a_dry_run_adds_nothing():
+    pages = FakePages()
 
-    assert "Sitemap lastmod" not in fields
+    report = run_import(
+        pages,
+        sitemap_client(),
+        "https://example.org/sitemap.xml",
+        dry_run=True,
+        sleep=lambda seconds: None,
+    )
+
+    assert len(report.plan.to_add) == 3
+    assert pages.added == {}

@@ -1,5 +1,7 @@
+import logging
 import time
 import zlib
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from xml.etree.ElementTree import ParseError
@@ -10,6 +12,8 @@ from defusedxml.ElementTree import fromstring
 
 from chickadee.errors import ChickadeeError
 from chickadee.extractor import parse_page_date
+
+log = logging.getLogger(__name__)
 
 NS = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
 MAX_SITEMAPS = 50
@@ -95,7 +99,10 @@ def parse_sitemap(xml: bytes | str) -> SitemapEntries:
 
 
 def collect_page_urls(
-    client: httpx.Client, sitemap_url: str
+    client: httpx.Client,
+    sitemap_url: str,
+    *,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> dict[str, datetime | None]:
     to_visit = [sitemap_url]
     visited: set[str] = set()
@@ -115,9 +122,9 @@ def collect_page_urls(
         for page in entries.pages:
             pages.setdefault(page, entries.lastmod.get(page))
         to_visit.extend(entries.sitemaps)
-        time.sleep(1)
+        sleep(1)
 
     if to_visit:
-        print(f"Stopped after {MAX_SITEMAPS} sitemaps. Some were not read.")
+        log.warning("Stopped after %d sitemaps. Some were not read.", MAX_SITEMAPS)
 
     return pages
