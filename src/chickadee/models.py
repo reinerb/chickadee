@@ -5,9 +5,9 @@ No I/O, and no Airtable column names. airtable.py maps those.
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal, get_args
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 Status = Literal["Up", "Down"]
 LinkStatus = Literal["ok", "broken", "unverified"]
@@ -87,6 +87,15 @@ class Page(BaseModel):
     # flags
     attention: tuple[Flag, ...] = ()
     attention_count: int | None = None
+
+    @field_validator("attention", mode="before")
+    @classmethod
+    def _known_flags_only(cls, value: Any) -> Any:
+        # Attention is a multiple select, so it can hold options Chickadee
+        # doesn't know, like a renamed flag. Ignore them rather than fail.
+        if isinstance(value, list | tuple):
+            return tuple(flag for flag in value if flag in get_args(Flag))
+        return value
 
     @property
     def label(self) -> str:
