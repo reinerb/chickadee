@@ -22,6 +22,21 @@ Flag = Literal[
 
 
 @dataclass(frozen=True)
+class Check:
+    """One logged uptime check."""
+
+    page_id: str
+    checked_at: datetime
+    ok: bool
+    status_code: int | None = None
+    error: str | None = None
+
+    @property
+    def status(self) -> Status:
+        return "Up" if self.ok else "Down"
+
+
+@dataclass(frozen=True)
 class LinkResult:
     url: str
     status: LinkStatus

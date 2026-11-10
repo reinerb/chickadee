@@ -1,4 +1,4 @@
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any
 
@@ -9,7 +9,7 @@ from chickadee.audit import ContentUpdate
 from chickadee.checker import CheckResult, status_of
 from chickadee.collect import PendingBatch, SavedReview
 from chickadee.extractor import ContentChange, PageContent
-from chickadee.models import Flag, LinkResult, Page, Status
+from chickadee.models import Check, Flag, LinkResult, Page, Status
 from chickadee.reviewer import PageReview, Topic
 from chickadee.site_context import parse_site_context
 from chickadee.uptime import StatusUpdate
@@ -52,6 +52,7 @@ PAGE_COLUMNS = {
     "attention": "Attention",
     "attention_count": "Attention count",
 }
+CHECK_COLUMNS = ["Page", "Checked at", "Ok", "Status code", "Error"]
 
 
 def page_from_record(record: RecordDict) -> Page:
@@ -69,11 +70,31 @@ def page_from_record(record: RecordDict) -> Page:
     )
 
 
+def check_from_record(record: RecordDict) -> Check | None:
+    """A logged check, or None if the row is missing its page or time."""
+    fields = record["fields"]
+    linked = fields.get("Page") or []
+    checked_at = fields.get("Checked at")
+    if not linked or not checked_at:
+        return None
+    return Check(
+        page_id=linked[0],
+        checked_at=datetime.fromisoformat(checked_at),
+        ok=bool(fields.get("Ok")),
+        status_code=fields.get("Status code"),
+        error=fields.get("Error"),
+    )
+
+
 class AirtablePages:
     """The Pages table, spoken to in Chickadee's own types."""
 
     def __init__(self, table: Table) -> None:
         self._table = table
+
+    def all(self) -> list[Page]:
+        """Every page, including inactive ones."""
+        return [page_from_record(record) for record in self._table.all()]
 
     def active(self) -> list[Page]:
         records = self._table.all(formula="{Active}")
@@ -194,6 +215,19 @@ class AirtableChecks:
         if rows:
             self._table.batch_create(rows)
 
+    def since(self, start: datetime) -> list[Check]:
+        records = self._table.all(formula=checked_after(start), fields=CHECK_COLUMNS)
+        return [check for record in records if (check := check_from_record(record))]
+
+    def newest_before(self, cutoff: datetime) -> Iterator[Check]:
+        """Checks before `cutoff`, newest first, fetched a page at a time."""
+        for records in self._table.iterate(
+            formula=checked_before(cutoff), sort=["-Checked at"], fields=CHECK_COLUMNS
+        ):
+            for record in records:
+                if (check := check_from_record(record)) is not None:
+                    yield check
+
     def ids_before(self, cutoff: datetime) -> list[str]:
         records = self._table.all(formula=checked_before(cutoff), fields=["Checked at"])
         return [record["id"] for record in records]
@@ -232,7 +266,10 @@ class AirtableSite:
         self._table = table
 
     def context(self) -> str | None:
-        return parse_site_context(self._table.all(fields=["Context"]))
+        records = self._table.all(fields=["Context"])
+        return parse_site_context(
+            [record["fields"].get("Context") for record in records]
+        )
 
 
 class AirtableBatches:

@@ -1,5 +1,4 @@
 import pytest
-from pyairtable.api.types import RecordDict
 
 from chickadee import digest, reviewer
 from chickadee.digest import digest_system_prompt
@@ -11,14 +10,9 @@ TOPICS = [Topic("Fish", "Research on fish welfare")]
 CONTEXT = "A research nonprofit. Readers are advocates and journalists."
 
 
-def site(*contexts: str | None) -> list[RecordDict]:
-    records: list[RecordDict] = []
-    for number, context in enumerate(contexts):
-        fields = {"Name": "Site"}
-        if context is not None:
-            fields["Context"] = context
-        records.append({"id": f"rec{number}", "createdTime": "", "fields": fields})
-    return records
+def site(*contexts: str | None) -> list[str | None]:
+    """The Context of each row in the Site table."""
+    return list(contexts)
 
 
 @pytest.mark.parametrize("records", [site(), site(None), site("   \n ")])

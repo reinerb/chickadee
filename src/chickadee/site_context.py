@@ -1,19 +1,13 @@
 from collections.abc import Sequence
 
-from pyairtable import Api
-from pyairtable.api.types import RecordDict
-
 from chickadee.errors import ConfigError
 
 MAX_CONTEXT_CHARS = 2000
 
 
-def parse_site_context(records: Sequence[RecordDict]) -> str | None:
-    texts = [
-        text
-        for record in records
-        if (text := (record["fields"].get("Context") or "").strip())
-    ]
+def parse_site_context(contexts: Sequence[str | None]) -> str | None:
+    """The site context from the Site table's rows, or None if there isn't one."""
+    texts = [text for context in contexts if (text := (context or "").strip())]
     if not texts:
         return None
     if len(texts) > 1:
@@ -28,10 +22,6 @@ def parse_site_context(records: Sequence[RecordDict]) -> str | None:
             f"Keep it under {MAX_CONTEXT_CHARS:,}: it's sent with every review."
         )
     return context
-
-
-def load_site_context(api: Api, base_id: str) -> str | None:
-    return parse_site_context(api.table(base_id, "Site").all(fields=["Context"]))
 
 
 def with_context(role: str, rules: str, context: str | None) -> str:

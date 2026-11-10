@@ -1,65 +1,55 @@
-from collections.abc import Collection, Iterable, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 
-from pyairtable.api.types import RecordDict
+from chickadee.models import Check, Status
 
 
 @dataclass(frozen=True)
 class Event:
     page_id: str
     at: datetime
-    status: str
+    status: Status
     status_code: int | None
     error: str | None
 
 
 def latest_status(
-    checks_newest_first: Iterable[RecordDict], page_ids: Collection[str]
-) -> dict[str, str]:
-    statuses: dict[str, str] = {}
+    checks_newest_first: Iterable[Check], page_ids: Collection[str]
+) -> dict[str, Status]:
+    statuses: dict[str, Status] = {}
     if not page_ids:
         return statuses
     for check in checks_newest_first:
-        fields = check["fields"]
-        linked = fields.get("Page") or []
-        if not linked or linked[0] not in page_ids or linked[0] in statuses:
+        if check.page_id not in page_ids or check.page_id in statuses:
             continue
-        statuses[linked[0]] = "Up" if fields.get("Ok") else "Down"
+        statuses[check.page_id] = check.status
         if len(statuses) == len(page_ids):
             break
     return statuses
 
 
 def find_events(
-    checks: Sequence[RecordDict], initial: Mapping[str, str] | None = None
+    checks: Iterable[Check], initial: Mapping[str, Status] | None = None
 ) -> list[Event]:
-    usable = [
-        c for c in checks if c["fields"].get("Checked at") and c["fields"].get("Page")
-    ]
-    usable.sort(key=lambda c: datetime.fromisoformat(c["fields"]["Checked at"]))
-
-    last_status: dict[str, str] = dict(initial or {})
+    last_status: dict[str, Status] = dict(initial or {})
     events: list[Event] = []
 
-    for check in usable:
-        fields = check["fields"]
-        page_id = fields["Page"][0]
-        status = "Up" if fields.get("Ok") else "Down"
-        previous = last_status.get(page_id)
-        last_status[page_id] = status
+    for check in sorted(checks, key=lambda check: check.checked_at):
+        previous = last_status.get(check.page_id)
+        last_status[check.page_id] = check.status
 
-        went_down = status == "Down" and previous != "Down"
-        came_back = status == "Up" and previous == "Down"
+        went_down = check.status == "Down" and previous != "Down"
+        came_back = check.status == "Up" and previous == "Down"
 
         if went_down or came_back:
             events.append(
                 Event(
-                    page_id=page_id,
-                    at=datetime.fromisoformat(fields["Checked at"]),
-                    status=status,
-                    status_code=fields.get("Status code"),
-                    error=fields.get("Error"),
+                    page_id=check.page_id,
+                    at=check.checked_at,
+                    status=check.status,
+                    status_code=check.status_code,
+                    error=check.error,
                 )
             )
 

@@ -6,6 +6,7 @@ from pyairtable.api.types import RecordDict
 
 from chickadee.airtable import (
     PAGE_COLUMNS,
+    check_from_record,
     checked_after,
     checked_before,
     page_from_record,
@@ -298,3 +299,26 @@ def test_unknown_attention_options_are_ignored():
     }
 
     assert page_from_record(record).attention == ("Stale",)
+
+
+def test_checks_missing_a_page_or_time_are_skipped():
+    def check(**fields: Any) -> RecordDict:
+        return {
+            "id": "recCheck",
+            "createdTime": "2026-11-01T00:00:00.000Z",
+            "fields": fields,
+        }
+
+    logged = check_from_record(
+        check(
+            Page=["recA"],
+            **{"Checked at": "2026-11-01T10:00:00.000Z", "Status code": 503},
+        )
+    )
+
+    assert logged is not None
+    assert (logged.page_id, logged.status, logged.status_code) == ("recA", "Down", 503)
+    assert check_from_record(check(Page=["recA"])) is None
+    assert (
+        check_from_record(check(**{"Checked at": "2026-11-01T10:00:00.000Z"})) is None
+    )

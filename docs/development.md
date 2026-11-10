@@ -60,12 +60,12 @@ src/chickadee/
   collect.py     turns finished review batches into reviews to save
   claude.py      submits review batches to Claude and reads back the results
   flags.py       decides which pages need attention
-  digest.py      builds the weekly digest and its email
+  digest.py      puts together the weekly digest and its email
   airtable.py    reads and writes each Airtable table in Chickadee's own types, and builds formulas for filtering checks by date
   history.py     turns logged checks into outage and recovery events
   sitemap.py     reads sitemaps and sitemap indexes, including compressed ones and lastmod dates
-  site_context.py  reads and checks the site context, and places it in prompts
-  models.py      data types shared across modules: Page, LinkResult, and the Status and Flag values
+  site_context.py  checks the site context, and places it in prompts
+  models.py      data types shared across modules: Page, Check, LinkResult, and the Status and Flag values
 ```
 
 `__init__.py` is deliberately empty. Python runs a package's `__init__.py` whenever anything in the package is imported, so code there gets loaded constantly and can create import loops.
