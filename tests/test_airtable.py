@@ -285,3 +285,16 @@ def test_new_pages_without_a_lastmod_leave_it_empty():
     fields = to_new_page_fields("https://example.org/post", None)
 
     assert "Sitemap lastmod" not in fields
+
+
+def test_unknown_attention_options_are_ignored():
+    record: RecordDict = {
+        "id": "recOld",
+        "createdTime": "2026-01-05T09:00:00.000Z",
+        "fields": {
+            "URL": "https://example.org/old",
+            "Attention": ["Stale", "Broken links (old name)"],
+        },
+    }
+
+    assert page_from_record(record).attention == ("Stale",)
