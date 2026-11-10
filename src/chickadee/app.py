@@ -6,7 +6,7 @@ from typing import Self
 import httpx
 from pyairtable import Api
 
-from chickadee.airtable import AirtablePages
+from chickadee.airtable import AirtableChecks, AirtablePages
 from chickadee.checker import make_client
 from chickadee.config import Options, Settings, load_options, load_settings
 
@@ -53,3 +53,8 @@ class App:
     def pages(self) -> AirtablePages:
         table = self.airtable.table(self.settings.airtable_base_id, "Pages")
         return AirtablePages(table)
+
+    @cached_property
+    def checks(self) -> AirtableChecks:
+        table = self.airtable.table(self.settings.airtable_base_id, "Checks")
+        return AirtableChecks(table)

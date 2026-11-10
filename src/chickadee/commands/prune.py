@@ -1,12 +1,8 @@
 import argparse
 from datetime import UTC, datetime, timedelta
 
-from pyairtable import Api
-
-from chickadee.airtable import checked_before
 from chickadee.app import App
 from chickadee.commands._args import positive_int
-from chickadee.config import load_options, load_settings
 
 HELP = "Delete logged checks older than the retention period."
 
@@ -25,12 +21,10 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 def run(args: argparse.Namespace, app: App) -> None:
-    settings = load_settings()
-    checks = Api(settings.airtable_token).table(settings.airtable_base_id, "Checks")
-    days = args.days if args.days is not None else load_options().retention_days
-
+    days = args.days if args.days is not None else app.options.retention_days
     cutoff = datetime.now(UTC) - timedelta(days=days)
-    old = checks.all(formula=checked_before(cutoff), fields=["Checked at"])
+
+    old = app.checks.ids_before(cutoff)
     print(f"Found {len(old)} check(s) older than {days} days")
 
     if args.dry_run:
@@ -39,5 +33,5 @@ def run(args: argparse.Namespace, app: App) -> None:
     if not old:
         return
 
-    checks.batch_delete(record["id"] for record in old)
+    app.checks.delete(old)
     print(f"Deleted {len(old)} check(s).")

@@ -50,6 +50,7 @@ src/chickadee/
     _args.py     argument types shared by more than one command
   alerts.py      alert rules, payloads and delivery
   webhooks.py    posts JSON to a webhook without exposing its URL in errors
+  uptime.py      checks every page, records its status and decides which alerts to send
   checker.py     the shared HTTP client, single-page check, the retry for failed checks, and what gets logged
   extractor.py   pulls the title, description, dates, headings, text and links from HTML, and fingerprints it
   importer.py    matches URLs that are written differently and decides which sitemap pages to add

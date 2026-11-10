@@ -7,8 +7,9 @@ from pyairtable.api.types import RecordDict, UpdateRecordDict
 
 from chickadee.checker import CheckResult, status_of
 from chickadee.extractor import ContentChange, PageContent
-from chickadee.models import Flag, LinkResult, Page
+from chickadee.models import Flag, LinkResult, Page, Status
 from chickadee.reviewer import PageReview
+from chickadee.uptime import StatusUpdate
 
 # Page attribute -> Pages column. To read a new column, add a field
 # to models.Page and a line here.
@@ -92,6 +93,55 @@ class AirtablePages:
         ]
         if updates:
             self._table.batch_update(updates)
+
+    def save_statuses(
+        self, updates: Sequence[StatusUpdate], checked_at: datetime
+    ) -> None:
+        records: list[UpdateRecordDict] = [
+            {
+                "id": update.page_id,
+                "fields": to_status_fields(
+                    update.result,
+                    checked_at,
+                    update.previous_status,
+                    alerted_status=update.alerted_status,
+                ),
+            }
+            for update in updates
+        ]
+        if records:
+            self._table.batch_update(records)
+
+    def save_alerted(self, statuses: Mapping[str, Status]) -> None:
+        updates: list[UpdateRecordDict] = [
+            {"id": page_id, "fields": {"Alerted status": status}}
+            for page_id, status in statuses.items()
+        ]
+        if updates:
+            self._table.batch_update(updates)
+
+
+class AirtableChecks:
+    """The Checks table: the uptime log."""
+
+    def __init__(self, table: Table) -> None:
+        self._table = table
+
+    def record(self, results: Mapping[str, CheckResult], checked_at: datetime) -> None:
+        rows = [
+            to_check_fields(page_id, result, checked_at)
+            for page_id, result in results.items()
+        ]
+        if rows:
+            self._table.batch_create(rows)
+
+    def ids_before(self, cutoff: datetime) -> list[str]:
+        records = self._table.all(formula=checked_before(cutoff), fields=["Checked at"])
+        return [record["id"] for record in records]
+
+    def delete(self, ids: Sequence[str]) -> None:
+        if ids:
+            self._table.batch_delete(ids)
 
 
 def _stamp(moment: datetime) -> str:
@@ -201,7 +251,11 @@ def to_audit_fields(
 
 
 def to_status_fields(
-    result: CheckResult, checked_at: datetime, previous_status: str | None
+    result: CheckResult,
+    checked_at: datetime,
+    previous_status: str | None,
+    *,
+    alerted_status: Status | None = None,
 ) -> dict[str, Any]:
     status = status_of(result)
     fields: dict[str, Any] = {
@@ -213,6 +267,8 @@ def to_status_fields(
 
     if status != previous_status:
         fields["Status since"] = checked_at.isoformat()
+    if alerted_status is not None:
+        fields["Alerted status"] = alerted_status
 
     return fields
 
