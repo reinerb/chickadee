@@ -7,7 +7,7 @@ from pyairtable.api.types import RecordDict, UpdateRecordDict
 
 from chickadee.checker import CheckResult, status_of
 from chickadee.extractor import ContentChange, PageContent
-from chickadee.models import LinkResult, Page
+from chickadee.models import Flag, LinkResult, Page
 from chickadee.reviewer import PageReview
 
 # Page attribute -> Pages column. To read a new column, add a field
@@ -81,6 +81,14 @@ class AirtablePages:
         updates: list[UpdateRecordDict] = [
             {"id": page_id, "fields": to_link_fields(found, checked_at)}
             for page_id, found in results.items()
+        ]
+        if updates:
+            self._table.batch_update(updates)
+
+    def save_flags(self, flags: Mapping[str, Sequence[Flag]]) -> None:
+        updates: list[UpdateRecordDict] = [
+            {"id": page_id, "fields": to_flag_fields(page_flags)}
+            for page_id, page_flags in flags.items()
         ]
         if updates:
             self._table.batch_update(updates)
@@ -221,3 +229,7 @@ def to_link_fields(
         "Broken link count": len(broken),
         "Links checked at": checked_at.isoformat(),
     }
+
+
+def to_flag_fields(flags: Sequence[Flag]) -> dict[str, Any]:
+    return {"Attention": list(flags), "Attention count": len(flags)}
