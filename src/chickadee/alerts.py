@@ -120,7 +120,7 @@ def build_test_alert(*, recovered: bool, now: datetime) -> dict[str, Any]:
 def deliver_alerts(
     client: httpx.Client, webhook_url: str, pending: Sequence[PendingAlert]
 ) -> list[PendingAlert]:
-    delivered = []
+    delivered: list[PendingAlert] = []
 
     for alert in pending:
         error = post_json(client, webhook_url, alert.payload)

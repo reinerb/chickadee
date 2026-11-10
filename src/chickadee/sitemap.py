@@ -25,7 +25,7 @@ GZIP_MAGIC = b"\x1f\x8b"
 class SitemapEntries:
     pages: tuple[str, ...]
     sitemaps: tuple[str, ...]
-    lastmod: dict[str, datetime] = field(default_factory=dict)
+    lastmod: dict[str, datetime] = field(default_factory=dict[str, datetime])
 
 
 class SitemapError(ChickadeeError):

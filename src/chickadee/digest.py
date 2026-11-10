@@ -127,10 +127,12 @@ def _link(item: PageItem) -> str:
 
 
 def _page_lines(items: Sequence[PageItem], verb: str) -> list[str]:
-    lines = []
+    lines: list[str] = []
+
     for item in items:
         when = f" ({verb} {_day(item.when)})" if item.when else ""
         lines.append(f"- {_link(item)}{when}: {item.summary or 'review pending'}")
+
     return lines
 
 

@@ -73,7 +73,7 @@ def page_from_record(record: RecordDict) -> Page:
 def check_from_record(record: RecordDict) -> Check | None:
     """A logged check, or None if the row is missing its page or time."""
     fields = record["fields"]
-    linked = fields.get("Page") or []
+    linked: list[str] = fields.get("Page") or []
     checked_at = fields.get("Checked at")
     if not linked or not checked_at:
         return None
