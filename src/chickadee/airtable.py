@@ -112,6 +112,20 @@ class AirtablePages:
         if records:
             self._table.batch_update(records)
 
+    def tracked_urls(self) -> set[str]:
+        """Every page's URL, including inactive pages."""
+        return {
+            url
+            for record in self._table.all(fields=["URL"])
+            if (url := record["fields"].get("URL"))
+        }
+
+    def add(self, pages: Mapping[str, datetime | None]) -> None:
+        if pages:
+            self._table.batch_create(
+                [to_new_page_fields(url, lastmod) for url, lastmod in pages.items()]
+            )
+
     def save_alerted(self, statuses: Mapping[str, Status]) -> None:
         updates: list[UpdateRecordDict] = [
             {"id": page_id, "fields": {"Alerted status": status}}
@@ -289,3 +303,10 @@ def to_link_fields(
 
 def to_flag_fields(flags: Sequence[Flag]) -> dict[str, Any]:
     return {"Attention": list(flags), "Attention count": len(flags)}
+
+
+def to_new_page_fields(url: str, lastmod: datetime | None) -> dict[str, Any]:
+    fields: dict[str, Any] = {"URL": url, "Active": True}
+    if lastmod is not None:
+        fields["Sitemap lastmod"] = lastmod.isoformat()
+    return fields
