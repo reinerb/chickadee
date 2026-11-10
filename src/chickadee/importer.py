@@ -10,7 +10,7 @@ from pyairtable import Api
 from chickadee.checker import make_client
 from chickadee.config import load_settings
 from chickadee.prune import positive_int
-from chickadee.sitemap import SitemapError, collect_page_urls
+from chickadee.sitemap import collect_page_urls
 
 HELP = "Add pages from a sitemap to the Pages table."
 
@@ -90,10 +90,7 @@ def run(args: argparse.Namespace) -> None:
     pages = Api(settings.airtable_token).table(settings.airtable_base_id, "Pages")
 
     with make_client() as client:
-        try:
-            sitemap_pages = collect_page_urls(client, args.sitemap_url)
-        except SitemapError as exc:
-            raise SystemExit(f"Couldn't read the sitemap: {exc}") from None
+        sitemap_pages = collect_page_urls(client, args.sitemap_url)
 
     print(f"Found {len(sitemap_pages)} URL(s) in the sitemap.")
 

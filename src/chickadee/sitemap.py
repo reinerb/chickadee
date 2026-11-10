@@ -2,10 +2,13 @@ import time
 import zlib
 from dataclasses import dataclass, field
 from datetime import datetime
+from xml.etree.ElementTree import ParseError
 
 import httpx
+from defusedxml import DefusedXmlException
 from defusedxml.ElementTree import fromstring
 
+from chickadee.errors import ChickadeeError
 from chickadee.extractor import parse_page_date
 
 NS = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
@@ -21,7 +24,7 @@ class SitemapEntries:
     lastmod: dict[str, datetime] = field(default_factory=dict)
 
 
-class SitemapError(Exception):
+class SitemapError(ChickadeeError):
     pass
 
 
@@ -47,24 +50,30 @@ def fetch_sitemap(
     chunks: list[bytes] = []
     size = 0
 
-    with client.stream("GET", url) as response:
-        response.raise_for_status()
-        for chunk in response.iter_bytes():
-            size += len(chunk)
-
-            if size > limit:
-                raise SitemapError(f"{url} is larger than {limit:,} bytes")
-
-            chunks.append(chunk)
-
     try:
-        return decompress(b"".join(chunks), limit)
-    except SitemapError as exc:
-        raise SitemapError(f"{url}: {exc}") from None
+        with client.stream("GET", url) as response:
+            response.raise_for_status()
+            for chunk in response.iter_bytes():
+                size += len(chunk)
+
+                if size > limit:
+                    raise SitemapError(f"{url} is larger than {limit:,} bytes")
+
+                chunks.append(chunk)
+    except httpx.HTTPStatusError as exc:
+        raise SitemapError(f"HTTP {exc.response.status_code}") from exc
+    except httpx.HTTPError as exc:
+        raise SitemapError(type(exc).__name__) from exc
+
+    return decompress(b"".join(chunks), limit)
 
 
 def parse_sitemap(xml: bytes | str) -> SitemapEntries:
-    root = fromstring(xml)
+    try:
+        root = fromstring(xml)
+    except (ParseError, DefusedXmlException) as exc:
+        raise SitemapError(f"not a valid sitemap: {exc}") from exc
+
     pages: list[str] = []
     lastmod: dict[str, datetime] = {}
 
@@ -98,7 +107,11 @@ def collect_page_urls(
             continue
         visited.add(url)
 
-        entries = parse_sitemap(fetch_sitemap(client, url))
+        try:
+            entries = parse_sitemap(fetch_sitemap(client, url))
+        except SitemapError as exc:
+            raise SitemapError(f"{url}: {exc}") from exc
+
         for page in entries.pages:
             pages.setdefault(page, entries.lastmod.get(page))
         to_visit.extend(entries.sitemaps)

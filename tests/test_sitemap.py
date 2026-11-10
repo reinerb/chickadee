@@ -3,7 +3,14 @@ import gzip
 import httpx
 import pytest
 
-from chickadee.sitemap import SitemapError, decompress, fetch_sitemap, parse_sitemap
+from chickadee.errors import ChickadeeError
+from chickadee.sitemap import (
+    SitemapError,
+    collect_page_urls,
+    decompress,
+    fetch_sitemap,
+    parse_sitemap,
+)
 
 URLSET = """<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
@@ -72,3 +79,55 @@ def test_fetch_handles_gzip_files():
     )
     with httpx.Client(transport=transport) as client:
         assert fetch_sitemap(client, "https://example.org/sitemap.xml.gz") == SITEMAP
+
+
+def test_missing_sitemap_is_a_sitemap_error():
+    transport = httpx.MockTransport(lambda r: httpx.Response(404))
+    with (
+        httpx.Client(transport=transport) as client,
+        pytest.raises(SitemapError, match="HTTP 404"),
+    ):
+        fetch_sitemap(client, "https://example.org/sitemap.xml")
+
+
+def test_unreachable_sitemap_is_a_sitemap_error():
+    def refuse(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("refused", request=request)
+
+    with (
+        httpx.Client(transport=httpx.MockTransport(refuse)) as client,
+        pytest.raises(SitemapError, match="ConnectError"),
+    ):
+        fetch_sitemap(client, "https://example.org/sitemap.xml")
+
+
+@pytest.mark.parametrize(
+    "xml",
+    [b"<html>not a sitemap", b'<!DOCTYPE x [<!ENTITY a "b">]><urlset>&a;</urlset>'],
+    ids=["malformed", "entities"],
+)
+def test_invalid_xml_is_a_sitemap_error(xml: bytes):
+    with pytest.raises(SitemapError, match="not a valid sitemap"):
+        parse_sitemap(xml)
+
+
+@pytest.mark.parametrize(
+    ("response", "message"),
+    [
+        (httpx.Response(404), "HTTP 404"),
+        (httpx.Response(200, content=b"<html>"), "not a valid sitemap"),
+        (httpx.Response(200, content=b"\x1f\x8b nope"), "couldn't decompress"),
+    ],
+    ids=["missing", "invalid", "corrupt-gzip"],
+)
+def test_errors_name_the_sitemap_once(response: httpx.Response, message: str):
+    url = "https://example.org/sitemap.xml"
+    transport = httpx.MockTransport(lambda r: response)
+    with (
+        httpx.Client(transport=transport) as client,
+        pytest.raises(ChickadeeError) as caught,
+    ):
+        collect_page_urls(client, url)
+
+    assert str(caught.value).startswith(f"{url}: {message}")
+    assert str(caught.value).count(url) == 1
