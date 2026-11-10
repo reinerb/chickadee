@@ -1,7 +1,7 @@
 import httpx
 
 from chickadee.extractor import extract_links
-from chickadee.results import LinkResult, LinkStatus
+from chickadee.models import LinkResult, LinkStatus
 
 BROKEN_CODES = {404, 410}
 MAX_LINKS_PER_PAGE = 100
