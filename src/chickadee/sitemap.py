@@ -61,9 +61,9 @@ def fetch_sitemap(
 
                 chunks.append(chunk)
     except httpx.HTTPStatusError as exc:
-        raise SitemapError(f"{url}: HTTP {exc.response.status_code}") from exc
+        raise SitemapError(f"HTTP {exc.response.status_code}") from exc
     except httpx.HTTPError as exc:
-        raise SitemapError(f"{url}: {type(exc).__name__}") from exc
+        raise SitemapError(type(exc).__name__) from exc
 
     try:
         return decompress(b"".join(chunks), limit)
