@@ -3,11 +3,10 @@ from datetime import UTC, datetime
 from typing import Any, Literal
 
 from chickadee.checker import CheckResult, status_of
-from chickadee.extractor import PageContent
+from chickadee.extractor import ContentChange, PageContent
 from chickadee.results import LinkResult
 from chickadee.reviewer import PageReview
 
-ContentChange = Literal["new", "changed", "unchanged"]
 ReviewState = Literal["new", "changed", "setup", "baseline", "current"]
 
 
@@ -21,13 +20,6 @@ def checked_before(cutoff: datetime) -> str:
 
 def checked_after(cutoff: datetime) -> str:
     return f"IS_AFTER({{Checked at}}, DATETIME_PARSE('{_stamp(cutoff)}'))"
-
-
-def classify_change(previous_hash: str | None, current_hash: str) -> ContentChange:
-    if previous_hash is None:
-        return "new"
-
-    return "unchanged" if previous_hash == current_hash else "changed"
 
 
 def review_state(
