@@ -41,7 +41,7 @@ COMMANDS: dict[str, Command] = {
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="content-monitor",
+        prog="chickadee",
         description="Keep track of what's on a website, what changed, and what needs attention.",
     )
     subparsers = parser.add_subparsers(
