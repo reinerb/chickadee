@@ -6,6 +6,7 @@ from itertools import chain
 from pyairtable import Api
 
 from chickadee.airtable import checked_after, checked_before
+from chickadee.app import App
 from chickadee.checker import make_client
 from chickadee.config import load_digest_webhook, load_settings
 from chickadee.digest import (
@@ -54,7 +55,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def run(args: argparse.Namespace) -> None:
+def run(args: argparse.Namespace, app: App) -> None:
     settings = load_settings()
     api = Api(settings.airtable_token)
     pages = api.table(settings.airtable_base_id, "Pages")

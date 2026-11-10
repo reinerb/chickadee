@@ -7,6 +7,7 @@ from pyairtable import Api
 from pyairtable.api.types import UpdateRecordDict
 
 from chickadee.airtable import to_link_fields
+from chickadee.app import App
 from chickadee.checker import make_client
 from chickadee.config import load_options, load_settings
 from chickadee.links import (
@@ -24,7 +25,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     pass
 
 
-def run(args: argparse.Namespace) -> None:
+def run(args: argparse.Namespace, app: App) -> None:
     settings = load_settings()
     options = load_options()
     pages = Api(settings.airtable_token).table(settings.airtable_base_id, "Pages")

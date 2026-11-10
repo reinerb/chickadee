@@ -2,6 +2,7 @@ import argparse
 
 from pyairtable import Api
 
+from chickadee.app import App
 from chickadee.checker import make_client
 from chickadee.commands._args import positive_int
 from chickadee.config import load_settings
@@ -24,7 +25,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def run(args: argparse.Namespace) -> None:
+def run(args: argparse.Namespace, app: App) -> None:
     settings = load_settings()
     pages = Api(settings.airtable_token).table(settings.airtable_base_id, "Pages")
 

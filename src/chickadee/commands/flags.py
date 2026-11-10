@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from pyairtable import Api
 from pyairtable.api.types import UpdateRecordDict
 
+from chickadee.app import App
 from chickadee.config import load_options, load_settings
 from chickadee.flags import ALL_FLAGS, facts_from_record, find_flags, flag_update
 
@@ -30,7 +31,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     pass
 
 
-def run(args: argparse.Namespace) -> None:
+def run(args: argparse.Namespace, app: App) -> None:
     settings = load_settings()
     options = load_options()
     pages = Api(settings.airtable_token).table(settings.airtable_base_id, "Pages")

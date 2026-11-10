@@ -6,6 +6,7 @@ from pyairtable import Api
 from pyairtable.api.types import UpdateRecordDict
 
 from chickadee.airtable import drop_missing, to_review_fields
+from chickadee.app import App
 from chickadee.config import load_anthropic_key, load_settings
 from chickadee.reviewer import match_topics, parse_custom_id, parse_review
 
@@ -16,7 +17,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     pass
 
 
-def run(args: argparse.Namespace) -> None:
+def run(args: argparse.Namespace, app: App) -> None:
     settings = load_settings()
     api = Api(settings.airtable_token)
     pages = api.table(settings.airtable_base_id, "Pages")

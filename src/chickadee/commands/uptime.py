@@ -13,6 +13,7 @@ from chickadee.alerts import (
     deliver_alerts,
     down_since,
 )
+from chickadee.app import App
 from chickadee.checker import check_pages, make_client, should_log, status_of
 from chickadee.config import load_alert_webhook, load_options, load_settings
 
@@ -25,7 +26,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     pass
 
 
-def run(args: argparse.Namespace) -> None:
+def run(args: argparse.Namespace, app: App) -> None:
     settings = load_settings()
     options = load_options()
     api = Api(settings.airtable_token)
