@@ -1,9 +1,11 @@
-from collections.abc import Iterator, Mapping, Sequence
+import logging
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any
 
 from pyairtable import Table
 from pyairtable.api.types import RecordDict, UpdateRecordDict
+from pydantic import ValidationError
 
 from chickadee.audit import ContentUpdate
 from chickadee.checker import CheckResult, status_of
@@ -13,6 +15,8 @@ from chickadee.models import Check, Flag, LinkResult, Page, Status
 from chickadee.reviewer import PageReview, Topic
 from chickadee.site_context import parse_site_context
 from chickadee.uptime import StatusUpdate
+
+log = logging.getLogger(__name__)
 
 # Page attribute -> Pages column. To read a new column, add a field
 # to models.Page and a line here.
@@ -70,6 +74,24 @@ def page_from_record(record: RecordDict) -> Page:
     )
 
 
+def pages_from_records(records: Iterable[RecordDict]) -> list[Page]:
+    """Each row as a Page. A row that doesn't fit is skipped and reported,
+    so one half-filled row can't stop a run for every other page."""
+    pages: list[Page] = []
+    for record in records:
+        try:
+            pages.append(page_from_record(record))
+        except ValidationError as exc:
+            columns = sorted(
+                {
+                    PAGE_COLUMNS.get(str(error["loc"][0]), str(error["loc"][0]))
+                    for error in exc.errors()
+                }
+            )
+            log.warning("Skipped page %s: check %s", record["id"], ", ".join(columns))
+    return pages
+
+
 def check_from_record(record: RecordDict) -> Check | None:
     """A logged check, or None if the row is missing its page or time."""
     fields = record["fields"]
@@ -94,11 +116,10 @@ class AirtablePages:
 
     def all(self) -> list[Page]:
         """Every page, including inactive ones."""
-        return [page_from_record(record) for record in self._table.all()]
+        return pages_from_records(self._table.all())
 
     def active(self) -> list[Page]:
-        records = self._table.all(formula="{Active}")
-        return [page_from_record(record) for record in records]
+        return pages_from_records(self._table.all(formula="{Active}"))
 
     def save_links(
         self, results: Mapping[str, Sequence[LinkResult]], checked_at: datetime

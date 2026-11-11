@@ -1,7 +1,9 @@
+import logging
 from datetime import UTC, datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
+import pytest
 from pyairtable.api.types import RecordDict
 
 from chickadee.airtable import (
@@ -10,6 +12,7 @@ from chickadee.airtable import (
     checked_after,
     checked_before,
     page_from_record,
+    pages_from_records,
     to_check_fields,
     to_content_fields,
     to_flag_fields,
@@ -322,3 +325,25 @@ def test_checks_missing_a_page_or_time_are_skipped():
     assert (
         check_from_record(check(**{"Checked at": "2026-11-01T10:00:00.000Z"})) is None
     )
+
+
+def test_rows_that_dont_fit_are_skipped_not_fatal(caplog: pytest.LogCaptureFixture):
+    def row(record_id: str, **fields: Any) -> RecordDict:
+        return {
+            "id": record_id,
+            "createdTime": "2026-01-01T00:00:00.000Z",
+            "fields": fields,
+        }
+
+    with caplog.at_level(logging.WARNING):
+        pages = pages_from_records(
+            [
+                row("recGood", URL="https://example.org"),
+                row("recDraft", Name="Draft"),
+                row("recOdd", URL="https://example.org/odd", Status="Maintenance"),
+            ]
+        )
+
+    assert [page.id for page in pages] == ["recGood"]
+    assert "Skipped page recDraft: check URL" in caplog.text
+    assert "Skipped page recOdd: check Status" in caplog.text
