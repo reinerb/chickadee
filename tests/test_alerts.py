@@ -172,4 +172,4 @@ def test_only_delivered_alerts_are_reported_as_delivered():
     with httpx.Client(transport=httpx.MockTransport(handler)) as client:
         delivered = deliver_alerts(client, "https://hooks.example.org/x", pending)
 
-    assert [alert.record_id for alert in delivered] == ["rec1", "rec3"]
+    assert [alert.page_id for alert in delivered] == ["rec1", "rec3"]

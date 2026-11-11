@@ -34,6 +34,7 @@ class FakePages:
     def __init__(self, *pages: Page) -> None:
         self.pages = pages
         self.saved: list[ContentUpdate] = []
+        self.saves = 0
 
     def active(self) -> tuple[Page, ...]:
         return self.pages
@@ -41,7 +42,8 @@ class FakePages:
     def save_content(
         self, updates: Sequence[ContentUpdate], audited_at: datetime
     ) -> None:
-        self.saved = list(updates)
+        self.saved.extend(updates)
+        self.saves += 1
 
 
 class FakeClaude:
@@ -106,6 +108,25 @@ def test_only_new_or_changed_pages_are_sent_for_review():
     ]
     assert report.changes == {"new": 1, "unchanged": 1}
     # The page that couldn't be read is skipped, not saved.
+    assert [update.page_id for update in pages.saved] == ["recNew", "recSame"]
+
+
+def test_content_is_saved_as_the_run_goes():
+    pages = FakePages(page("recNew", "/new"), UNCHANGED, page("recGone", "/gone"))
+    client = httpx.Client(transport=httpx.MockTransport(site))
+
+    run_audit(
+        pages,
+        client,
+        SETUP,
+        ignore=None,
+        review_all=False,
+        audited_at=NOW,
+        save_every=1,
+        sleep=lambda seconds: None,
+    )
+
+    assert pages.saves == 2  # one for each page that could be read
     assert [update.page_id for update in pages.saved] == ["recNew", "recSame"]
 
 

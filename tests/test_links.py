@@ -23,6 +23,7 @@ class FakePages:
     def __init__(self, *pages: Page) -> None:
         self.pages = pages
         self.saved: dict[str, Sequence[LinkResult]] = {}
+        self.saves = 0
         self.checked_at: datetime | None = None
 
     def active(self) -> tuple[Page, ...]:
@@ -31,7 +32,8 @@ class FakePages:
     def save_links(
         self, results: Mapping[str, Sequence[LinkResult]], checked_at: datetime
     ) -> None:
-        self.saved = dict(results)
+        self.saved.update(results)
+        self.saves += 1
         self.checked_at = checked_at
 
 
@@ -182,3 +184,33 @@ def test_run_links_saves_results_for_readable_pages_only():
     ]
     assert store.checked_at == NOW
     assert report == LinksReport(pages=1, links=2, broken=1)
+
+
+def test_results_are_saved_as_the_run_goes_and_links_checked_once():
+    requested: list[str] = []
+
+    def site(request: httpx.Request) -> httpx.Response:
+        requested.append(request.url.path)
+        if request.url.path.startswith("/post"):
+            return httpx.Response(200, html='<main><a href="/shared">s</a></main>')
+        return httpx.Response(200, html="fine")
+
+    store = FakePages(
+        *(
+            Page(id=f"rec{n}", created_at=NOW, url=f"https://example.org/post{n}")
+            for n in range(3)
+        )
+    )
+
+    run_links(
+        store,
+        client_for(site),
+        ignore=None,
+        checked_at=NOW,
+        save_every=2,
+        sleep=lambda seconds: None,
+    )
+
+    assert store.saves == 2  # two pages, then the last one
+    assert set(store.saved) == {"rec0", "rec1", "rec2"}
+    assert requested.count("/shared") == 1

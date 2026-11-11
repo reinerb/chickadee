@@ -1,6 +1,7 @@
 import httpx
+import pytest
 
-from chickadee.checker import CheckResult, check_pages, should_log
+from chickadee.checker import CheckResult, check_pages, fetch_html, should_log
 
 
 def make_result(ok: bool) -> CheckResult:
@@ -11,6 +12,10 @@ def make_result(ok: bool) -> CheckResult:
         response_time_ms=100,
         error=None,
     )
+
+
+def serving(response: httpx.Response) -> httpx.Client:
+    return httpx.Client(transport=httpx.MockTransport(lambda request: response))
 
 
 def test_changes_mode_logs_only_when_status_changes():
@@ -60,3 +65,33 @@ def test_no_pause_when_everything_is_up():
         check_pages(client, {"a": "https://example.org/"}, sleep=pauses.append)
 
     assert pauses == []
+
+
+def test_fetch_html_returns_html_pages():
+    response = fetch_html(
+        serving(httpx.Response(200, html="<p>Hi</p>")), "https://example.org"
+    )
+
+    assert response is not None
+    assert response.text == "<p>Hi</p>"
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        httpx.Response(404, html="<p>Gone</p>"),
+        httpx.Response(200, json={"not": "html"}),
+    ],
+    ids=["error-status", "not-html"],
+)
+def test_fetch_html_skips_pages_it_cant_read(response: httpx.Response):
+    assert fetch_html(serving(response), "https://example.org") is None
+
+
+def test_fetch_html_skips_unreachable_pages():
+    def refuse(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("refused", request=request)
+
+    client = httpx.Client(transport=httpx.MockTransport(refuse))
+
+    assert fetch_html(client, "https://example.org") is None

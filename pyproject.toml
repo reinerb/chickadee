@@ -1,6 +1,6 @@
 [project]
 name = "chickadee"
-version = "0.2.0"
+version = "1.0.0"
 description = "Keeps track of what's on a website, what changed, and what needs attention."
 readme = "README.md"
 authors = [{ name = "ben", email = "ben@tidemarkstudio.dev" }]
@@ -25,7 +25,12 @@ requires = ["uv_build>=0.13.7,<0.14.0"]
 build-backend = "uv_build"
 
 [dependency-groups]
-dev = ["pyright>=1.1.414", "pytest>=9.2.0", "ruff>=0.17.3"]
+dev = [
+    "pyright>=1.1.414",
+    "pytest>=9.2.0",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.17.3",
+]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "C4", "PIE", "PT", "RUF", "DTZ"]

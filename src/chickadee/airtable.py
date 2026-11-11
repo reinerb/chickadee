@@ -1,9 +1,11 @@
-from collections.abc import Iterator, Mapping, Sequence
+import logging
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any
 
 from pyairtable import Table
-from pyairtable.api.types import RecordDict, UpdateRecordDict
+from pyairtable.api.types import RecordDict
+from pydantic import ValidationError
 
 from chickadee.audit import ContentUpdate
 from chickadee.checker import CheckResult, status_of
@@ -13,6 +15,8 @@ from chickadee.models import Check, Flag, LinkResult, Page, Status
 from chickadee.reviewer import PageReview, Topic
 from chickadee.site_context import parse_site_context
 from chickadee.uptime import StatusUpdate
+
+log = logging.getLogger(__name__)
 
 # Page attribute -> Pages column. To read a new column, add a field
 # to models.Page and a line here.
@@ -70,6 +74,24 @@ def page_from_record(record: RecordDict) -> Page:
     )
 
 
+def pages_from_records(records: Iterable[RecordDict]) -> list[Page]:
+    """Each row as a Page. A row that doesn't fit is skipped and reported,
+    so one half-filled row can't stop a run for every other page."""
+    pages: list[Page] = []
+    for record in records:
+        try:
+            pages.append(page_from_record(record))
+        except ValidationError as exc:
+            columns = sorted(
+                {
+                    PAGE_COLUMNS.get(str(error["loc"][0]), str(error["loc"][0]))
+                    for error in exc.errors()
+                }
+            )
+            log.warning("Skipped page %s: check %s", record["id"], ", ".join(columns))
+    return pages
+
+
 def check_from_record(record: RecordDict) -> Check | None:
     """A logged check, or None if the row is missing its page or time."""
     fields = record["fields"]
@@ -92,91 +114,28 @@ class AirtablePages:
     def __init__(self, table: Table) -> None:
         self._table = table
 
+    def _update(self, fields_by_id: Mapping[str, dict[str, Any]]) -> None:
+        """Write each page's new field values, in as few requests as possible."""
+        if fields_by_id:
+            self._table.batch_update(
+                [
+                    {"id": page_id, "fields": fields}
+                    for page_id, fields in fields_by_id.items()
+                ]
+            )
+
+    # Reading
+
     def all(self) -> list[Page]:
         """Every page, including inactive ones."""
-        return [page_from_record(record) for record in self._table.all()]
+        return pages_from_records(self._table.all())
 
     def active(self) -> list[Page]:
-        records = self._table.all(formula="{Active}")
-        return [page_from_record(record) for record in records]
-
-    def save_links(
-        self, results: Mapping[str, Sequence[LinkResult]], checked_at: datetime
-    ) -> None:
-        updates: list[UpdateRecordDict] = [
-            {"id": page_id, "fields": to_link_fields(found, checked_at)}
-            for page_id, found in results.items()
-        ]
-        if updates:
-            self._table.batch_update(updates)
-
-    def save_flags(self, flags: Mapping[str, Sequence[Flag]]) -> None:
-        updates: list[UpdateRecordDict] = [
-            {"id": page_id, "fields": to_flag_fields(page_flags)}
-            for page_id, page_flags in flags.items()
-        ]
-        if updates:
-            self._table.batch_update(updates)
-
-    def save_statuses(
-        self, updates: Sequence[StatusUpdate], checked_at: datetime
-    ) -> None:
-        records: list[UpdateRecordDict] = [
-            {
-                "id": update.page_id,
-                "fields": to_status_fields(
-                    update.result,
-                    checked_at,
-                    update.previous_status,
-                    alerted_status=update.alerted_status,
-                ),
-            }
-            for update in updates
-        ]
-        if records:
-            self._table.batch_update(records)
+        return pages_from_records(self._table.all(formula="{Active}"))
 
     def ids(self) -> set[str]:
         """Every page's record ID, including inactive pages."""
         return {record["id"] for record in self._table.all(fields=["URL"])}
-
-    def save_content(
-        self, updates: Sequence[ContentUpdate], audited_at: datetime
-    ) -> None:
-        records: list[UpdateRecordDict] = [
-            {
-                "id": update.page_id,
-                "fields": to_content_fields(
-                    update.content,
-                    update.content_hash,
-                    update.change,
-                    audited_at,
-                    review_version=update.review_version,
-                ),
-            }
-            for update in updates
-        ]
-        if records:
-            self._table.batch_update(records)
-
-    def save_reviews(
-        self, reviews: Sequence[SavedReview], reviewed_at: datetime
-    ) -> None:
-        records: list[UpdateRecordDict] = [
-            {
-                "id": review.page_id,
-                "fields": to_review_fields(
-                    review.review,
-                    reviewed_at,
-                    review.reviewed_hash,
-                    review.version,
-                    review.topic_ids,
-                ),
-            }
-            for review in reviews
-        ]
-        if records:
-            self._table.batch_update(records)
 
     def tracked_urls(self) -> set[str]:
         """Every page's URL, including inactive pages."""
@@ -186,19 +145,86 @@ class AirtablePages:
             if (url := record["fields"].get("URL"))
         }
 
+    # Writing
+
     def add(self, pages: Mapping[str, datetime | None]) -> None:
         if pages:
             self._table.batch_create(
                 [to_new_page_fields(url, lastmod) for url, lastmod in pages.items()]
             )
 
+    def save_links(
+        self, results: Mapping[str, Sequence[LinkResult]], checked_at: datetime
+    ) -> None:
+        self._update(
+            {
+                page_id: to_link_fields(found, checked_at)
+                for page_id, found in results.items()
+            }
+        )
+
+    def save_flags(self, flags: Mapping[str, Sequence[Flag]]) -> None:
+        self._update(
+            {
+                page_id: to_flag_fields(page_flags)
+                for page_id, page_flags in flags.items()
+            }
+        )
+
+    def save_statuses(
+        self, updates: Sequence[StatusUpdate], checked_at: datetime
+    ) -> None:
+        self._update(
+            {
+                update.page_id: to_status_fields(
+                    update.result,
+                    checked_at,
+                    update.previous_status,
+                    alerted_status=update.alerted_status,
+                )
+                for update in updates
+            }
+        )
+
     def save_alerted(self, statuses: Mapping[str, Status]) -> None:
-        updates: list[UpdateRecordDict] = [
-            {"id": page_id, "fields": {"Alerted status": status}}
-            for page_id, status in statuses.items()
-        ]
-        if updates:
-            self._table.batch_update(updates)
+        self._update(
+            {
+                page_id: {"Alerted status": status}
+                for page_id, status in statuses.items()
+            }
+        )
+
+    def save_content(
+        self, updates: Sequence[ContentUpdate], audited_at: datetime
+    ) -> None:
+        self._update(
+            {
+                update.page_id: to_content_fields(
+                    update.content,
+                    update.content_hash,
+                    update.change,
+                    audited_at,
+                    review_version=update.review_version,
+                )
+                for update in updates
+            }
+        )
+
+    def save_reviews(
+        self, reviews: Sequence[SavedReview], reviewed_at: datetime
+    ) -> None:
+        self._update(
+            {
+                review.page_id: to_review_fields(
+                    review.review,
+                    reviewed_at,
+                    review.reviewed_hash,
+                    review.version,
+                    review.topic_ids,
+                )
+                for review in reviews
+            }
+        )
 
 
 class AirtableChecks:

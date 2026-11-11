@@ -18,7 +18,7 @@ AlertAction = Literal["send", "record", "none"]
 
 @dataclass(frozen=True)
 class PendingAlert:
-    record_id: str
+    page_id: str
     status: Status
     payload: dict[str, Any]
 

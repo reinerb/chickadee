@@ -128,5 +128,5 @@ def send_alerts(
     Alerts that fail aren't recorded, so the next run sends them again.
     """
     delivered = deliver_alerts(client, webhook_url, alerts)
-    pages.save_alerted({alert.record_id: alert.status for alert in delivered})
+    pages.save_alerted({alert.page_id: alert.status for alert in delivered})
     return len(delivered)

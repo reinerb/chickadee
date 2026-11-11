@@ -9,6 +9,7 @@ from typing import Any, Protocol
 import httpx
 from anthropic.types.messages.batch_create_params import Request
 
+from chickadee.checker import fetch_html
 from chickadee.errors import ConfigError
 from chickadee.extractor import (
     ContentChange,
@@ -31,6 +32,7 @@ from chickadee.reviewer import (
 log = logging.getLogger(__name__)
 
 NEEDS_REVIEW = ("new", "changed", "setup")
+SAVE_EVERY = 25
 
 
 @dataclass(frozen=True)
@@ -77,22 +79,6 @@ class AuditReport:
     requests: tuple[Request, ...]
 
 
-def read_page(client: httpx.Client, url: str) -> str | None:
-    """The page's HTML, or None if it can't be read."""
-    try:
-        response = client.get(url)
-    except httpx.RequestError as exc:
-        log.warning("SKIP %s: %s", url, exc)
-        return None
-
-    content_type = response.headers.get("content-type", "")
-    if not response.is_success or "text/html" not in content_type:
-        log.warning("SKIP %s: status %s, %s", url, response.status_code, content_type)
-        return None
-
-    return response.text
-
-
 def run_audit(
     pages: AuditPages,
     client: httpx.Client,
@@ -101,6 +87,7 @@ def run_audit(
     ignore: str | None,
     review_all: bool,
     audited_at: datetime,
+    save_every: int = SAVE_EVERY,
     sleep: Callable[[float], None] = time.sleep,
 ) -> AuditReport:
     updates: list[ContentUpdate] = []
@@ -110,11 +97,11 @@ def run_audit(
 
     for page in pages.active():
         sleep(1)
-        html = read_page(client, page.url)
-        if html is None:
+        response = fetch_html(client, page.url)
+        if response is None:
             continue
 
-        content = extract_content(html, ignore=ignore)
+        content = extract_content(response.text, ignore=ignore)
         current = content_hash(content)
         change = classify_change(page.content_hash, current)
         state = review_state(
@@ -150,7 +137,12 @@ def run_audit(
             "%-9s %-6s %-8s %s", change, "review" if review else "skip", state, page.url
         )
 
-    pages.save_content(updates, audited_at)
+        if len(updates) >= save_every:
+            pages.save_content(updates, audited_at)
+            updates = []
+
+    if updates:
+        pages.save_content(updates, audited_at)
     return AuditReport(changes, states, tuple(requests))
 
 
