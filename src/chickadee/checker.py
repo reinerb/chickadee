@@ -48,7 +48,7 @@ def status_of(result: CheckResult) -> Status:
 
 
 def should_log(
-    previous_status: str | None, result: CheckResult, check_log: CheckLog
+    previous_status: Status | None, result: CheckResult, check_log: CheckLog
 ) -> bool:
     if check_log == "all":
         return True
