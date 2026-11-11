@@ -1,6 +1,6 @@
 [project]
 name = "chickadee"
-version = "0.2.0"
+version = "1.0.0"
 description = "Keeps track of what's on a website, what changed, and what needs attention."
 readme = "README.md"
 authors = [{ name = "ben", email = "ben@tidemarkstudio.dev" }]
