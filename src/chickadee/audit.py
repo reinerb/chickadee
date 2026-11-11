@@ -32,6 +32,7 @@ from chickadee.reviewer import (
 log = logging.getLogger(__name__)
 
 NEEDS_REVIEW = ("new", "changed", "setup")
+SAVE_EVERY = 25
 
 
 @dataclass(frozen=True)
@@ -86,6 +87,7 @@ def run_audit(
     ignore: str | None,
     review_all: bool,
     audited_at: datetime,
+    save_every: int = SAVE_EVERY,
     sleep: Callable[[float], None] = time.sleep,
 ) -> AuditReport:
     updates: list[ContentUpdate] = []
@@ -135,7 +137,12 @@ def run_audit(
             "%-9s %-6s %-8s %s", change, "review" if review else "skip", state, page.url
         )
 
-    pages.save_content(updates, audited_at)
+        if len(updates) >= save_every:
+            pages.save_content(updates, audited_at)
+            updates = []
+
+    if updates:
+        pages.save_content(updates, audited_at)
     return AuditReport(changes, states, tuple(requests))
 
 

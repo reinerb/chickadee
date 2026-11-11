@@ -17,6 +17,7 @@ log = logging.getLogger(__name__)
 BROKEN_CODES = {404, 410}
 MAX_LINKS_PER_PAGE = 100
 PER_HOST_INTERVAL = 1.0
+SAVE_EVERY = 25
 
 
 @dataclass(frozen=True)
@@ -90,12 +91,16 @@ def check_links(
     client: httpx.Client,
     links: Iterable[str],
     *,
+    last_request: dict[str, float],
     sleep: Callable[[float], None],
     monotonic: Callable[[], float],
 ) -> dict[str, LinkResult]:
-    """Check each link, pausing between requests to the same site."""
+    """Check each link, pausing between requests to the same site.
+
+    `last_request` holds when each site was last asked, and is updated, so
+    the pacing carries over from one call to the next.
+    """
     results: dict[str, LinkResult] = {}
-    last_request: dict[str, float] = {}
 
     for link in links:
         host = urlparse(link).netloc
@@ -117,27 +122,35 @@ def run_links(
     *,
     ignore: str | None,
     checked_at: datetime,
+    save_every: int = SAVE_EVERY,
     sleep: Callable[[float], None] = time.sleep,
     monotonic: Callable[[], float] = time.monotonic,
 ) -> LinksReport:
-    found: dict[str, list[str]] = {}
+    # Each link is checked once per run, however many pages it's on.
+    results: dict[str, LinkResult] = {}
+    last_request: dict[str, float] = {}
+    unsaved: dict[str, list[LinkResult]] = {}
+    pages_read = 0
+
     for page in pages.active():
         sleep(1)
         links = links_on_page(client, page.url, ignore=ignore)
-        if links is not None:
-            found[page.id] = links
+        if links is None:
+            continue
+        pages_read += 1
 
-    unique = list(dict.fromkeys(link for links in found.values() for link in links))
-    log.info("Checking %d unique link(s) on %d pages", len(unique), len(found))
-    results = check_links(client, unique, sleep=sleep, monotonic=monotonic)
+        new = [link for link in dict.fromkeys(links) if link not in results]
+        results |= check_links(
+            client, new, last_request=last_request, sleep=sleep, monotonic=monotonic
+        )
+        unsaved[page.id] = [results[link] for link in links]
 
-    pages.save_links(
-        {
-            page_id: [results[link] for link in links]
-            for page_id, links in found.items()
-        },
-        checked_at,
-    )
+        if len(unsaved) >= save_every:
+            pages.save_links(unsaved, checked_at)
+            unsaved = {}
+
+    if unsaved:
+        pages.save_links(unsaved, checked_at)
 
     broken = sum(1 for result in results.values() if result.status == "broken")
-    return LinksReport(pages=len(found), links=len(unique), broken=broken)
+    return LinksReport(pages=pages_read, links=len(results), broken=broken)
