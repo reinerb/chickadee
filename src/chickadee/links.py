@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 
 import httpx
 
+from chickadee.checker import fetch_html
 from chickadee.extractor import extract_links
 from chickadee.models import LinkResult, LinkStatus, Page
 
@@ -77,16 +78,8 @@ def links_on_page(
     client: httpx.Client, url: str, *, ignore: str | None
 ) -> list[str] | None:
     """The links in a page's main content, or None if it can't be read."""
-    try:
-        response = client.get(url)
-    except httpx.RequestError as exc:
-        log.warning("SKIP %s: %s", url, type(exc).__name__)
-        return None
-
-    if not response.is_success or "text/html" not in response.headers.get(
-        "content-type", ""
-    ):
-        log.warning("SKIP %s: status %s", url, response.status_code)
+    response = fetch_html(client, url)
+    if response is None:
         return None
 
     links = extract_links(response.text, str(response.url), ignore=ignore)
