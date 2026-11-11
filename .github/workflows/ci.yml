@@ -33,4 +33,4 @@ jobs:
 
       - name: Test
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: uv run pytest
+        run: uv run pytest --cov=chickadee --cov-fail-under=85
